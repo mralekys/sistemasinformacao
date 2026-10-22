@@ -1,0 +1,1447 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Simulado ENADE 2026</title>
+<meta name="description" content="Simulado interativo de 50 questoes do ENADE 2026, com login por matricula, cronometro, correcao automatica e painel do professor.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,600;0,9..144,700;1,9..144,500&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+/* ---- Design plan ----
+   Color: paper/navy/teal/gold academic palette, matching the professor's existing exam-series identity.
+   Type: Fraunces (display, numbers, headings) + Space Grotesk (body/UI).
+   Layout: single-page screen stack (login → quiz → result, plus teacher gate → panel),
+           quiz is a tall scrollable question list under a sticky progress/timer header.
+*/
+:root{
+  --bg:#f3efe2; --panel:#ffffff; --panel-2:#faf6ec; --ink:#16202c; --muted:#6c675b;
+  --blue:#1a3a6b; --blue2:#2558a8; --teal:#0e7c74; --gold:#b9872a; --green:#1f7a4d; --red:#b23a2f;
+  --border:#ddd4bd; --radius:14px;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#10151c; --panel:#1a212c; --panel-2:#1f2733; --ink:#e9e4d6; --muted:#9b958a;
+    --blue:#7ea2e0; --blue2:#9cc0f0; --teal:#52c9bc; --gold:#e3bb52; --green:#57c585; --red:#e67b70;
+    --border:#333c49; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#10151c; --panel:#1a212c; --panel-2:#1f2733; --ink:#e9e4d6; --muted:#9b958a;
+  --blue:#7ea2e0; --blue2:#9cc0f0; --teal:#52c9bc; --gold:#e3bb52; --green:#57c585; --red:#e67b70;
+  --border:#333c49; color-scheme: dark;
+}
+*{box-sizing:border-box}
+body{
+  background:var(--bg); color:var(--ink);
+  font-family:'Space Grotesk',system-ui,sans-serif;
+  padding-left:max(16px, env(safe-area-inset-left,0px));
+  padding-right:max(16px, env(safe-area-inset-right,0px));
+  padding-bottom:40px;
+}
+body::before{
+  content:""; position:fixed; inset:0 0 auto; height:env(safe-area-inset-top,0px);
+  z-index:50; background:var(--panel);
+}
+h1,h2,h3{font-family:'Fraunces',Georgia,serif; margin:0; text-wrap:balance}
+.app{max-width:760px; margin:0 auto}
+.screen{display:block; padding-top:18px}
+.screen[hidden]{display:none}
+.eyebrow{font-size:.72rem; letter-spacing:.09em; text-transform:uppercase; color:var(--muted); font-weight:600}
+.card{background:var(--panel); border:1px solid var(--border); border-radius:var(--radius); padding:22px; margin-bottom:16px}
+.muted{color:var(--muted)}
+.btn{
+  font-family:'Space Grotesk',sans-serif; font-weight:600; font-size:.95rem; cursor:pointer;
+  border-radius:10px; border:1px solid transparent; padding:12px 20px; transition:transform .08s ease, opacity .15s ease;
+}
+.btn:active{transform:scale(.98)}
+.btn-primary{background:var(--blue); color:#fff}
+.btn-primary:hover{background:var(--blue2)}
+.btn-ghost{background:transparent; color:var(--blue); border-color:var(--border)}
+.btn-ghost:hover{border-color:var(--blue)}
+.btn-danger{background:var(--red); color:#fff}
+.btn:disabled{opacity:.5; cursor:not-allowed}
+.btn:focus-visible, input:focus-visible, textarea:focus-visible, .opt:focus-visible{
+  outline:2px solid var(--teal); outline-offset:2px;
+}
+input[type=text], input[type=password], textarea{
+  width:100%; font-family:inherit; font-size:1rem; padding:11px 13px; border-radius:9px;
+  border:1px solid var(--border); background:var(--panel-2); color:var(--ink);
+}
+label{display:block; font-size:.82rem; font-weight:600; color:var(--muted); margin-bottom:6px}
+.field{margin-bottom:14px}
+.chips{display:flex; gap:8px; flex-wrap:wrap; margin:14px 0}
+.chip{
+  background:var(--panel-2); border:1px solid var(--border); border-radius:20px; padding:6px 13px;
+  font-size:.8rem; font-weight:600; color:var(--blue2); font-variant-numeric:tabular-nums;
+}
+.brand-row{display:flex; align-items:baseline; justify-content:space-between; gap:10px; flex-wrap:wrap}
+.notice{background:var(--panel-2); border:1px solid var(--gold); border-left-width:4px; border-radius:10px; padding:14px 16px; font-size:.86rem; line-height:1.5}
+.notice ul{margin:8px 0 0; padding-left:1.2em}
+.notice li{margin-bottom:4px}
+details summary{cursor:pointer; color:var(--blue2); font-weight:600; font-size:.84rem; margin-top:8px}
+.error-box{background:rgba(178,58,47,.1); border:1px solid var(--red); color:var(--red); border-radius:9px; padding:10px 13px; font-size:.86rem; margin-bottom:12px}
+.error-box[hidden]{display:none}
+
+/* quiz screen */
+.quiz-topbar{
+  position:sticky; top:env(safe-area-inset-top,0px); z-index:40; background:var(--panel);
+  border-bottom:1px solid var(--border); padding:12px 0 10px; margin:0 -16px 18px; padding-inline:16px;
+}
+.quiz-topbar-row{display:flex; align-items:center; justify-content:space-between; gap:10px; max-width:760px; margin:0 auto}
+.quiz-id{font-size:.76rem; color:var(--muted)}
+.timer{font-family:'Fraunces',serif; font-weight:600; font-size:1.25rem; font-variant-numeric:tabular-nums}
+.timer.low{color:var(--red)}
+.progress-track{height:7px; border-radius:5px; background:var(--panel-2); overflow:hidden; max-width:760px; margin:8px auto 0}
+.progress-fill{height:100%; background:var(--teal); transition:width .25s ease; width:0%}
+.progress-label{font-size:.74rem; color:var(--muted); text-align:right; max-width:760px; margin:4px auto 0}
+
+.q-card{background:var(--panel); border:1px solid var(--border); border-radius:var(--radius); padding:20px; margin-bottom:16px; scroll-margin-top:90px}
+.q-card.unanswered-flag{border-color:var(--red)}
+.q-title{font-size:.78rem; color:var(--teal); font-weight:700; letter-spacing:.02em; margin-bottom:10px}
+.q-body :is(p){margin:0 0 8px}
+.opts{display:flex; flex-direction:column; gap:8px; margin-top:12px}
+.opt{
+  display:flex; gap:10px; align-items:flex-start; text-align:left; width:100%;
+  background:var(--panel-2); border:1px solid var(--border); border-radius:10px; padding:11px 13px;
+  cursor:pointer; font-family:inherit; font-size:.92rem; color:var(--ink); line-height:1.4;
+}
+.opt:hover{border-color:var(--blue2)}
+.opt .letter{
+  flex:0 0 auto; width:26px; height:26px; border-radius:50%; background:var(--panel);
+  border:1px solid var(--border); display:flex; align-items:center; justify-content:center;
+  font-weight:700; font-size:.82rem; color:var(--muted);
+}
+.opt[aria-pressed="true"]{background:rgba(37,88,168,.12); border-color:var(--blue2)}
+.opt[aria-pressed="true"] .letter{background:var(--blue2); border-color:var(--blue2); color:#fff}
+
+.finish-bar{position:sticky; bottom:0; background:var(--panel); border-top:1px solid var(--border); padding:14px 0; margin:0 -16px; padding-inline:16px}
+.finish-bar-inner{max-width:760px; margin:0 auto; display:flex; gap:10px; align-items:center; justify-content:space-between; flex-wrap:wrap}
+.confirm-panel{background:var(--panel-2); border:1px solid var(--gold); border-radius:10px; padding:14px; margin-top:10px; display:flex; flex-direction:column; gap:10px}
+.confirm-panel[hidden]{display:none}
+.confirm-actions{display:flex; gap:10px}
+
+/* result screen */
+.nota-hero{text-align:center; padding:28px 20px}
+.nota-num{font-size:3.4rem; font-weight:700; font-variant-numeric:tabular-nums; line-height:1}
+.nota-num small{font-size:1.4rem; color:var(--muted); font-weight:500}
+.dash-grid{display:grid; grid-template-columns:repeat(4,1fr); gap:10px; margin-top:16px}
+.dash-tile{background:var(--panel-2); border:1px solid var(--border); border-radius:10px; padding:12px 8px; text-align:center}
+.dash-tile .num{font-family:'Fraunces',serif; font-size:1.5rem; font-weight:700; font-variant-numeric:tabular-nums}
+.dash-tile .lbl{font-size:.68rem; color:var(--muted); text-transform:uppercase; letter-spacing:.04em; margin-top:2px}
+.perf-bar{display:flex; height:14px; border-radius:7px; overflow:hidden; margin-top:16px; border:1px solid var(--border)}
+.perf-seg{height:100%}
+.perf-legend{display:flex; gap:16px; margin-top:8px; font-size:.78rem; flex-wrap:wrap}
+.legend-dot{display:inline-block; width:9px; height:9px; border-radius:50%; margin-right:5px}
+.resp-table{width:100%; border-collapse:collapse; font-size:.84rem}
+.resp-table th, .resp-table td{padding:7px 8px; border-bottom:1px solid var(--border); text-align:left}
+.resp-table th{color:var(--muted); font-weight:600; font-size:.72rem; text-transform:uppercase}
+.tbl-wrap{overflow-x:auto}
+.tag{display:inline-block; padding:2px 9px; border-radius:20px; font-size:.74rem; font-weight:700}
+.tag-ok{background:rgba(31,122,77,.15); color:var(--green)}
+.tag-no{background:rgba(178,58,47,.15); color:var(--red)}
+.tag-blank{background:var(--panel-2); color:var(--muted)}
+.code-box textarea{font-family:ui-monospace,'SF Mono',Consolas,monospace; font-size:.76rem; resize:vertical; min-height:70px}
+.sync-badge{font-size:.76rem; font-weight:600; padding:3px 10px; border-radius:20px; display:inline-flex; align-items:center; gap:5px}
+.sync-ok{background:rgba(31,122,77,.15); color:var(--green)}
+.sync-off{background:var(--panel-2); color:var(--muted)}
+.copy-row{display:flex; gap:8px; align-items:center; margin-top:8px; flex-wrap:wrap}
+.copy-feedback{font-size:.8rem; color:var(--green); font-weight:600}
+.copy-feedback[hidden]{display:none}
+
+/* teacher panel */
+.stat-grid{display:grid; grid-template-columns:repeat(4,1fr); gap:10px}
+.stat-tile{background:var(--panel-2); border:1px solid var(--border); border-radius:10px; padding:12px 8px; text-align:center}
+.stat-tile .num{font-family:'Fraunces',serif; font-size:1.4rem; font-weight:700; font-variant-numeric:tabular-nums}
+.stat-tile .lbl{font-size:.66rem; color:var(--muted); text-transform:uppercase; margin-top:2px}
+.alunos-table{width:100%; border-collapse:collapse; font-size:.82rem; min-width:620px}
+.alunos-table th, .alunos-table td{padding:8px; border-bottom:1px solid var(--border); text-align:left; white-space:nowrap}
+.alunos-table th{color:var(--muted); font-weight:600; font-size:.7rem; text-transform:uppercase}
+.status-pill{padding:2px 9px; border-radius:20px; font-size:.72rem; font-weight:700}
+.status-done{background:rgba(31,122,77,.15); color:var(--green)}
+.status-pending{background:var(--panel-2); color:var(--muted)}
+.remove-btn{background:none; border:none; color:var(--red); cursor:pointer; font-size:.78rem; font-weight:600; padding:2px 6px}
+.gab-grid{display:grid; grid-template-columns:repeat(10,1fr); gap:6px; margin-top:12px}
+.gab-grid[hidden]{display:none}
+.gab-item{background:var(--panel-2); border:1px solid var(--border); border-radius:8px; padding:7px 2px; text-align:center}
+.gab-item .n{color:var(--muted); font-size:.64rem}
+.gab-item .l{font-family:'Fraunces',serif; font-weight:700; font-size:1.05rem; color:var(--blue2)}
+@media (max-width:480px){ .gab-grid{grid-template-columns:repeat(5,1fr)} }
+
+@media (max-width:480px){
+  .dash-grid{grid-template-columns:repeat(2,1fr)}
+  .stat-grid{grid-template-columns:repeat(2,1fr)}
+  .nota-num{font-size:2.6rem}
+}
+</style>
+</head>
+<body>
+
+<form name="resultados-enade26" data-netlify="true" netlify-honeypot="bot-field" hidden>
+  <input type="hidden" name="form-name" value="resultados-enade26">
+  <input name="bot-field">
+  <input type="text" name="matricula">
+  <input type="text" name="nome">
+  <input type="text" name="acertos">
+  <input type="text" name="erros">
+  <input type="text" name="branco">
+  <input type="text" name="nota">
+  <input type="text" name="aproveitamento">
+  <input type="text" name="data">
+</form>
+
+<div class="app">
+
+  <!-- LOGIN -->
+  <section class="screen" id="s-login">
+    <div class="card">
+      <div class="eyebrow">Instituto Federal do Tocantins · Campus Porto Nacional</div>
+      <div class="brand-row">
+        <h1 style="font-size:1.7rem">Simulado ENADE 2026</h1>
+      </div>
+      <p class="muted" style="margin:6px 0 0; font-size:.9rem">Sistemas de Informação — Tópicos em Sistemas de Informação II</p>
+      <p class="muted" style="margin:2px 0 0; font-size:.86rem">Prof. Alex Marques Gonçalves · 8º período</p>
+      <div class="chips">
+        <span class="chip">50 questões</span>
+        <span class="chip">180 minutos</span>
+        <span class="chip">Valor: 20,0 pontos</span>
+        <span class="chip">20 eixos do edital</span>
+      </div>
+    </div>
+
+    <div class="notice">
+      <strong>Antes de começar.</strong> Este simulado é individual e cronometrado — use-o para testar seu preparo sem consulta, exatamente como será na prova real do ENADE.
+      <details>
+        <summary>Ver orientações para a resolução da prova</summary>
+        <p style="font-size:.84rem; font-weight:600; margin:10px 0 4px">Observações sobre o simulado</p>
+        <ul>
+          <li>Leia com atenção as três afirmações (I, II e III) antes de marcar a alternativa — a resposta depende da combinação correta entre elas.</li>
+          <li>O cronômetro é regressivo: ao chegar a zero, o simulado é finalizado e corrigido automaticamente, mesmo com questões em branco.</li>
+          <li>Você pode navegar e alterar suas respostas livremente enquanto o tempo não se esgota, até clicar em "Finalizar simulado".</li>
+          <li>Depois de finalizado, não é possível voltar a responder — revise suas respostas antes de confirmar.</li>
+          <li>Guarde o código de comprovante exibido no resultado: é ele que comprova ao professor que você concluiu o simulado.</li>
+          <li>O gabarito não é mostrado ao final; ele será divulgado pelo professor após o prazo da turma.</li>
+          <li>Cada matrícula pode realizar este simulado <strong>apenas uma vez</strong> neste navegador. Se precisar refazer, fale com o professor.</li>
+        </ul>
+      </details>
+    </div>
+
+    <div class="card">
+      <div class="error-box" id="login-error" hidden></div>
+      <div class="field">
+        <label for="in-matricula">Matrícula</label>
+        <input type="text" id="in-matricula" inputmode="numeric" autocomplete="off" placeholder="Número de matrícula">
+      </div>
+      <div class="field" id="nome-confirm-field" hidden>
+        <label>Aluno(a) identificado(a)</label>
+        <span class="chip" id="nome-confirm-chip"></span>
+      </div>
+      <button class="btn btn-primary" id="btn-start" style="width:100%" disabled>Iniciar simulado</button>
+    </div>
+
+    <p style="text-align:center"><button class="btn btn-ghost" id="btn-go-proflogin" style="font-size:.82rem">Sou o professor</button></p>
+  </section>
+
+  <!-- QUIZ -->
+  <section class="screen" id="s-quiz" hidden>
+    <div class="quiz-topbar">
+      <div class="quiz-topbar-row">
+        <div class="quiz-id" id="quiz-id-label">—</div>
+        <div class="timer" id="quiz-timer">180:00</div>
+      </div>
+      <div class="progress-track"><div class="progress-fill" id="quiz-progress-fill"></div></div>
+      <div class="progress-label" id="quiz-progress-label">0 de 50 respondidas</div>
+    </div>
+
+    <div id="quiz-questions"></div>
+
+    <div class="finish-bar">
+      <div class="finish-bar-inner">
+        <span class="muted" style="font-size:.84rem">Role a página para revisar todas as questões antes de finalizar.</span>
+        <button class="btn btn-primary" id="btn-finalizar">Finalizar simulado</button>
+      </div>
+      <div class="confirm-panel" id="confirm-panel" hidden>
+        <span id="confirm-text"></span>
+        <div class="confirm-actions">
+          <button class="btn btn-ghost" id="btn-cancel-finalizar">Continuar respondendo</button>
+          <button class="btn btn-danger" id="btn-confirm-finalizar">Finalizar mesmo assim</button>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- RESULT -->
+  <section class="screen" id="s-result" hidden>
+    <div class="error-box" id="dup-banner" hidden style="margin-bottom:16px"></div>
+    <div class="card nota-hero">
+      <div class="eyebrow">Resultado de <span id="res-nome">—</span></div>
+      <div class="nota-num" id="res-nota">0,0 <small>/ 20,0</small></div>
+      <div class="dash-grid">
+        <div class="dash-tile"><div class="num" id="res-acertos">0</div><div class="lbl">Acertos</div></div>
+        <div class="dash-tile"><div class="num" id="res-erros">0</div><div class="lbl">Erros</div></div>
+        <div class="dash-tile"><div class="num" id="res-branco">0</div><div class="lbl">Em branco</div></div>
+        <div class="dash-tile"><div class="num" id="res-aproveitamento">0%</div><div class="lbl">Aproveitamento</div></div>
+      </div>
+      <div class="perf-bar" id="perf-bar"></div>
+      <div class="perf-legend">
+        <span><span class="legend-dot" style="background:var(--green)"></span>Acertos</span>
+        <span><span class="legend-dot" style="background:var(--red)"></span>Erros</span>
+        <span><span class="legend-dot" style="background:var(--border)"></span>Em branco</span>
+      </div>
+    </div>
+
+    <div class="card" id="respostas-card">
+      <h3 style="font-size:1rem; margin-bottom:10px">Suas respostas</h3>
+      <p class="muted" style="font-size:.8rem; margin-top:0">O gabarito não é exibido aqui — ele será disponibilizado pelo professor após o prazo da turma.</p>
+      <div class="tbl-wrap">
+        <table class="resp-table">
+          <thead><tr><th>Nº</th><th>Sua resposta</th><th>Resultado</th></tr></thead>
+          <tbody id="resp-tbody"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="card code-box">
+      <h3 style="font-size:1rem">Comprovante de conclusão</h3>
+      <p class="muted" style="font-size:.84rem; margin-top:4px">Copie este código e envie ao professor (mensagem, e-mail ou cole diretamente no painel do professor) como comprovante de que você concluiu o simulado.</p>
+      <span class="sync-badge" id="sync-badge">verificando sincronização…</span>
+      <textarea id="comprovante-text" readonly rows="3"></textarea>
+      <div class="copy-row">
+        <button class="btn btn-ghost" id="btn-copy-comprovante">Copiar código</button>
+        <span class="copy-feedback" id="copy-feedback" hidden>Copiado!</span>
+      </div>
+    </div>
+
+    <p style="text-align:center"><button class="btn btn-ghost" id="btn-back-login">Voltar à tela inicial</button></p>
+  </section>
+
+  <!-- PROF LOGIN -->
+  <section class="screen" id="s-prof-login" hidden>
+    <div class="card" style="max-width:420px; margin:40px auto">
+      <div class="eyebrow">Acesso restrito</div>
+      <h2 style="font-size:1.3rem; margin:4px 0 14px">Painel do professor</h2>
+      <div class="error-box" id="prof-error" hidden></div>
+      <div class="field">
+        <label for="in-prof-pw">Senha</label>
+        <input type="password" id="in-prof-pw" autocomplete="off">
+      </div>
+      <button class="btn btn-primary" id="btn-prof-entrar" style="width:100%">Entrar</button>
+      <p style="text-align:center; margin-top:12px"><button class="btn btn-ghost" id="btn-prof-voltar" style="font-size:.82rem">Voltar</button></p>
+    </div>
+  </section>
+
+  <!-- PROF PANEL -->
+  <section class="screen" id="s-prof" hidden>
+    <div class="card">
+      <div class="brand-row">
+        <h2 style="font-size:1.25rem">Painel do professor</h2>
+        <button class="btn btn-ghost" id="btn-prof-sair" style="font-size:.8rem">Sair</button>
+      </div>
+      <p class="muted" style="font-size:.84rem; margin:4px 0 0">Simulado ENADE 2026 — 14 matrículas inscritas</p>
+      <div class="stat-grid" style="margin-top:16px">
+        <div class="stat-tile"><div class="num" id="prof-total">14</div><div class="lbl">Inscritos</div></div>
+        <div class="stat-tile"><div class="num" id="prof-concluidos">0</div><div class="lbl">Concluídos</div></div>
+        <div class="stat-tile"><div class="num" id="prof-pendentes">14</div><div class="lbl">Pendentes</div></div>
+        <div class="stat-tile"><div class="num" id="prof-media">—</div><div class="lbl">Média da turma</div></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="brand-row">
+        <h3 style="font-size:1rem">Alunos</h3>
+        <button class="btn btn-ghost" id="btn-atualizar-servidor" style="font-size:.8rem">Atualizar do servidor</button>
+      </div>
+      <p class="muted" style="font-size:.78rem">Os resultados oficiais ficam travados no servidor (cada matrícula só é gravada uma vez — uma segunda tentativa nunca sobrescreve a primeira). Clique em "Atualizar do servidor" para carregar aqui, ou importe um código de comprovante manualmente. Cada resultado também é enviado ao Netlify Forms (<strong>Site → Forms → resultados-enade26</strong>) como registro de auditoria.</p>
+      <div class="error-box" id="servidor-error" hidden style="margin-top:8px"></div>
+      <div class="tbl-wrap">
+        <table class="alunos-table">
+          <thead><tr><th>Matrícula</th><th>Nome informado</th><th>Status</th><th>Nota</th><th>Acertos</th><th>Quando</th><th></th></tr></thead>
+          <tbody id="prof-tbody"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="brand-row">
+        <h3 style="font-size:1rem">Gabarito</h3>
+        <button class="btn btn-ghost" id="btn-toggle-gabarito" style="font-size:.8rem">Mostrar gabarito</button>
+      </div>
+      <p class="muted" style="font-size:.78rem; margin-top:4px">Visível apenas aqui, no painel do professor — os alunos não têm acesso a esta tela. O gabarito comentado (com a justificativa de cada questão) está no documento complementar do simulado.</p>
+      <div class="gab-grid" id="gab-grid" hidden></div>
+    </div>
+
+    <div class="card">
+      <h3 style="font-size:1rem">Importar comprovante</h3>
+      <p class="muted" style="font-size:.84rem; margin-top:4px">Cole aqui o código que o(a) aluno(a) enviou após finalizar o simulado.</p>
+      <textarea id="import-text" rows="2" placeholder="ENADE26-..."></textarea>
+      <div class="error-box" id="import-error" hidden style="margin-top:8px"></div>
+      <button class="btn btn-primary" id="btn-importar" style="margin-top:8px">Importar</button>
+    </div>
+
+    <div class="card">
+      <h3 style="font-size:1rem">Exportar dados</h3>
+      <p class="muted" style="font-size:.84rem; margin-top:4px">Copie o texto abaixo (formato CSV) e cole em uma planilha.</p>
+      <textarea id="export-text" readonly rows="4"></textarea>
+      <div class="copy-row">
+        <button class="btn btn-ghost" id="btn-copy-export">Copiar CSV</button>
+        <span class="copy-feedback" id="copy-feedback-export" hidden>Copiado!</span>
+      </div>
+    </div>
+  </section>
+
+</div>
+
+<script>
+/* ===== Dados do simulado (50 questões — verificado: 10 ocorrências de cada letra A–E) ===== */
+const QUESTOES = [
+{
+  titulo:`QUESTÃO 01 — Lógica Matemática / Teoria dos Conjuntos`,
+  enunciado:`<p style="font-style:italic;color:var(--muted);margin-bottom:6px">"A teoria dos conjuntos fornece a base para diversas estruturas em matemática discreta e ciência da computação, sendo as operações de união, interseção, diferença e complemento fundamentais para manipular coleções de elementos."</p><p style="font-style:italic;font-size:.82em;color:var(--muted);margin-bottom:16px">(Baseado em literatura de matemática discreta.)</p><p style="margin-bottom:10px">Avalie as afirmações a seguir.</p><p style="margin:10px 0"><strong>I.</strong> A união de dois conjuntos A e B (A ∪ B) contém todos os elementos que pertencem a A, a B, ou a ambos, sem repetição.</p><p style="margin:10px 0"><strong>II.</strong> A interseção de dois conjuntos disjuntos (sem elementos em comum) é sempre o conjunto vazio (∅).</p><p style="margin:10px 0"><strong>III.</strong> A diferença entre conjuntos é uma operação comutativa, ou seja, A − B é sempre igual a B − A, para quaisquer conjuntos A e B.</p><p style="margin-top:14px">É correto o que se afirma em:</p>`,
+  alts:[
+    `I, apenas.`,
+    `III, apenas.`,
+    `I e II, apenas.`,
+    `II e III, apenas.`,
+    `I, II e III.`
+  ]
+},
+{
+  titulo:`QUESTÃO 02 — Lógica Matemática / Tabelas-Verdade e Conectivos Lógicos`,
+  enunciado:`<p style="font-style:italic;color:var(--muted);margin-bottom:6px">"Os conectivos lógicos — como a conjunção, a disjunção, a negação, o condicional e o bicondicional — permitem construir proposições compostas, cujo valor-verdade pode ser determinado por meio de tabelas-verdade."</p><p style="font-style:italic;font-size:.82em;color:var(--muted);margin-bottom:16px">(Baseado em literatura de matemática discreta.)</p><p style="margin-bottom:10px">Avalie as afirmações a seguir.</p><p style="margin:10px 0"><strong>I.</strong> O conectivo "ou exclusivo" (XOR) entre duas proposições p e q é verdadeiro quando exatamente uma das duas proposições é verdadeira, sendo falso quando ambas são verdadeiras ou ambas são falsas.</p><p style="margin:10px 0"><strong>II.</strong> O bicondicional (p ↔ q) é verdadeiro sempre que p e q têm o mesmo valor-verdade, ou seja, quando ambas são verdadeiras ou ambas são falsas.</p><p style="margin:10px 0"><strong>III.</strong> Uma tabela-verdade para uma proposição composta com n proposições simples distintas possui, no total, 2n linhas (o dobro do número de proposições simples).</p><p style="margin-top:14px">É correto o que se afirma em:</p>`,
+  alts:[
+    `I e II, apenas.`,
+    `III, apenas.`,
+    `I e III, apenas.`,
+    `II e III, apenas.`,
+    `I, II e III.`
+  ]
+},
+{
+  titulo:`QUESTÃO 03 — Lógica Matemática / Grafos: Caminho Euleriano`,
+  enunciado:`<p style="font-style:italic;color:var(--muted);margin-bottom:6px">"O problema das Sete Pontes de Königsberg, resolvido por Leonhard Euler em 1736, é considerado o marco fundador da teoria dos grafos, ao demonstrar que não era possível atravessar as sete pontes da cidade passando por cada uma exatamente uma vez e retornando ao ponto de partida."</p><p style="font-style:italic;font-size:.82em;color:var(--muted);margin-bottom:16px">(Baseado em literatura de matemática discreta.)</p><p style="margin-bottom:10px">Avalie as afirmações a seguir.</p><p style="margin:10px 0"><strong>I.</strong> Um caminho euleriano é aquele que percorre cada aresta de um grafo exatamente uma vez, podendo repetir vértices durante o percurso.</p><p style="margin:10px 0"><strong>II.</strong> Euler demonstrou que um grafo possui um circuito euleriano (caminho euleriano que retorna ao vértice inicial) se, e somente se, todos os seus vértices possuem grau par.</p><p style="margin:10px 0"><strong>III.</strong> O problema das pontes de Königsberg não possui solução porque o grafo correspondente possui exatamente dois vértices de grau ímpar, o que inviabiliza apenas o circuito euleriano, mas não um caminho euleriano aberto (sem retorno ao início).</p><p style="margin-top:14px">É correto o que se afirma em:</p>`,
+  alts:[
+    `I, apenas.`,
+    `II, apenas.`,
+    `I e III, apenas.`,
+    `II e III, apenas.`,
+    `I e II, apenas.`
+  ]
+},
+{
+  titulo:`QUESTÃO 04 — Probabilidade e Estatística / Probabilidade Condicional e Teorema de Bayes`,
+  enunciado:`<p style="font-style:italic;color:var(--muted);margin-bottom:6px">"O Teorema de Bayes permite calcular a probabilidade de um evento A, dado que um evento B ocorreu, a partir das probabilidades condicionais inversas e das probabilidades marginais dos eventos envolvidos, sendo amplamente utilizado em sistemas de classificação e diagnóstico."</p><p style="font-style:italic;font-size:.82em;color:var(--muted);margin-bottom:16px">(Baseado em literatura de estatística aplicada.)</p><p style="margin-bottom:10px">Avalie as afirmações a seguir.</p><p style="margin:10px 0"><strong>I.</strong> A probabilidade condicional P(A|B) representa a probabilidade de ocorrência do evento A, dado que o evento B já ocorreu, e é calculada, quando P(B) > 0, como P(A∩B)/P(B).</p><p style="margin:10px 0"><strong>II.</strong> Dois eventos A e B são estatisticamente independentes se, e somente se, P(A|B) = P(A), ou seja, a ocorrência de B não altera a probabilidade de A.</p><p style="margin:10px 0"><strong>III.</strong> O Teorema de Bayes só pode ser aplicado quando os eventos envolvidos são mutuamente exclusivos, sendo inválido seu uso quando os eventos podem ocorrer simultaneamente.</p><p style="margin-top:14px">É correto o que se afirma em:</p>`,
+  alts:[
+    `I, apenas.`,
+    `I e II, apenas.`,
+    `III, apenas.`,
+    `II e III, apenas.`,
+    `I, II e III.`
+  ]
+},
+{
+  titulo:`QUESTÃO 05 — Probabilidade e Estatística / Amostragem`,
+  enunciado:`<p style="font-style:italic;color:var(--muted);margin-bottom:6px">"A escolha da técnica de amostragem — como a amostragem aleatória simples, a amostragem estratificada e a amostragem por conglomerados — influencia diretamente a representatividade e a validade estatística de uma pesquisa."</p><p style="font-style:italic;font-size:.82em;color:var(--muted);margin-bottom:16px">(Baseado em literatura de estatística aplicada.)</p><p style="margin-bottom:10px">Avalie as afirmações a seguir.</p><p style="margin:10px 0"><strong>I.</strong> Na amostragem aleatória simples, cada elemento da população tem a mesma probabilidade de ser selecionado, e a seleção de cada elemento é independente da seleção dos demais.</p><p style="margin:10px 0"><strong>II.</strong> Na amostragem estratificada, a população é dividida em subgrupos (estratos) internamente mais homogêneos, e amostras são extraídas de cada estrato, o que geralmente melhora a precisão da estimativa quando os estratos diferem entre si.</p><p style="margin:10px 0"><strong>III.</strong> Na amostragem por conglomerados, a população é dividida em grupos (conglomerados) e, em vez de amostrar indivíduos diretamente, sorteiam-se conglomerados inteiros para compor a amostra — sendo essa técnica geralmente mais barata, porém potencialmente menos precisa do que a amostragem aleatória simples, se os conglomerados forem heterogêneos entre si.</p><p style="margin-top:14px">É correto o que se afirma em:</p>`,
+  alts:[
+    `I e II, apenas.`,
+    `I, apenas.`,
+    `I e III, apenas.`,
+    `I, II e III.`,
+    `II e III, apenas.`
+  ]
+},
+{
+  titulo:`QUESTÃO 06 — Algoritmos e Estruturas de Dados / Ordenação Topológica`,
+  enunciado:`<p style="font-style:italic;color:var(--muted);margin-bottom:6px">"A ordenação topológica de um grafo direcionado acíclico (DAG) produz uma sequência linear de seus vértices, tal que, para toda aresta direcionada (u, v), o vértice u aparece antes do vértice v na sequência — sendo amplamente utilizada para representar dependências, como em sistemas de build ou grades curriculares."</p><p style="font-style:italic;font-size:.82em;color:var(--muted);margin-bottom:16px">(Baseado em literatura de estruturas de dados.)</p><p style="margin-bottom:10px">Avalie as afirmações a seguir.</p><p style="margin:10px 0"><strong>I.</strong> A ordenação topológica só pode ser aplicada a grafos direcionados acíclicos (DAGs); um grafo que contém um ciclo direcionado não admite ordenação topológica válida.</p><p style="margin:10px 0"><strong>II.</strong> O algoritmo de Kahn realiza a ordenação topológica removendo iterativamente vértices de grau de entrada zero (sem dependências pendentes) do grafo, até que todos os vértices tenham sido processados.</p><p style="margin:10px 0"><strong>III.</strong> Um mesmo grafo direcionado acíclico sempre admite uma única ordenação topológica possível, não havendo ambiguidade na ordem resultante.</p><p style="margin-top:14px">É correto o que se afirma em:</p>`,
+  alts:[
+    `I, apenas.`,
+    `I e II, apenas.`,
+    `III, apenas.`,
+    `II e III, apenas.`,
+    `I, II e III.`
+  ]
+},
+{
+  titulo:`QUESTÃO 07 — Algoritmos e Estruturas de Dados / Complexidade de Pior, Médio e Melhor Caso`,
+  enunciado:`<p style="font-style:italic;color:var(--muted);margin-bottom:6px">"A análise de complexidade de um algoritmo pode considerar diferentes cenários de entrada, sendo comum distinguir entre a complexidade de pior caso, de caso médio e de melhor caso, cada uma oferecendo uma perspectiva distinta sobre o desempenho do algoritmo."</p><p style="font-style:italic;font-size:.82em;color:var(--muted);margin-bottom:16px">(Baseado em literatura de estruturas de dados.)</p><p style="margin-bottom:10px">Avalie as afirmações a seguir.</p><p style="margin:10px 0"><strong>I.</strong> O Quicksort possui complexidade de pior caso O(n²), que ocorre tipicamente quando o pivô escolhido repetidamente resulta em partições extremamente desbalanceadas (como ao ordenar um vetor já ordenado, usando o primeiro elemento como pivô).</p><p style="margin:10px 0"><strong>II.</strong> A complexidade de caso médio do Quicksort é O(n log n), sendo esse o comportamento esperado para entradas aleatórias.</p><p style="margin:10px 0"><strong>III.</strong> A notação Big O (O-grande) é utilizada exclusivamente para expressar a complexidade de melhor caso de um algoritmo, nunca sendo aplicada à análise de pior caso.</p><p style="margin-top:14px">É correto o que se afirma em:</p>`,
+  alts:[
+    `I, apenas.`,
+    `III, apenas.`,
+    `I e III, apenas.`,
+    `I e II, apenas.`,
+    `I, II e III.`
+  ]
+},
+{
+  titulo:`QUESTÃO 08 — Algoritmos e Estruturas de Dados / Shell Sort`,
+  enunciado:`<p style="font-style:italic;color:var(--muted);margin-bottom:6px">"O Shell Sort, proposto por Donald Shell em 1959, é um algoritmo de ordenação que generaliza o Insertion Sort, comparando e trocando elementos distantes entre si por um intervalo (gap) que vai diminuindo progressivamente ao longo da execução."</p><p style="font-style:italic;font-size:.82em;color:var(--muted);margin-bottom:16px">(Baseado em literatura de estruturas de dados.)</p><p style="margin-bottom:10px">Avalie as afirmações a seguir.</p><p style="margin:10px 0"><strong>I.</strong> O Shell Sort compara elementos separados por um intervalo (gap) maior que 1 nas primeiras passagens, reduzindo esse intervalo progressivamente até que, na última passagem, o intervalo seja igual a 1 — equivalente, nesse ponto, a uma passagem do Insertion Sort.</p><p style="margin:10px 0"><strong>II.</strong> A sequência de intervalos (gaps) utilizada no Shell Sort não influencia sua complexidade de tempo, sendo o desempenho do algoritmo idêntico independentemente da sequência escolhida.</p><p style="margin:10px 0"><strong>III.</strong> O Shell Sort é classificado como um algoritmo de ordenação in-place, pois não requer uma estrutura de dados auxiliar significativa além do vetor original.</p><p style="margin-top:14px">É correto o que se afirma em:</p>`,
+  alts:[
+    `I e III, apenas.`,
+    `I, apenas.`,
+    `II, apenas.`,
+    `I e II, apenas.`,
+    `I, II e III.`
+  ]
+},
+{
+  titulo:`QUESTÃO 09 — Paradigmas de Linguagens / Programação Orientada a Eventos`,
+  enunciado:`<p style="font-style:italic;color:var(--muted);margin-bottom:6px">"A programação orientada a eventos é um paradigma no qual o fluxo de execução do programa é determinado por eventos — como ações do usuário, mensagens de outros programas ou notificações do sistema — processados por meio de funções de retorno (callbacks) registradas para cada tipo de evento."</p><p style="font-style:italic;font-size:.82em;color:var(--muted);margin-bottom:16px">(Baseado em literatura de linguagens de programação.)</p><p style="margin-bottom:10px">Avalie as afirmações a seguir.</p><p style="margin:10px 0"><strong>I.</strong> Em um ambiente orientado a eventos, como o JavaScript no navegador, um "event loop" (laço de eventos) é responsável por monitorar a fila de eventos e disparar os callbacks correspondentes conforme os eventos ocorrem.</p><p style="margin:10px 0"><strong>II.</strong> A programação orientada a eventos é incompatível com linguagens de paradigma orientado a objetos, não sendo possível implementar um modelo de eventos em uma linguagem como Java ou C#.</p><p style="margin:10px 0"><strong>III.</strong> Interfaces gráficas de usuário (GUIs) são um exemplo típico de aplicação do paradigma orientado a eventos, em que ações como cliques de mouse ou pressionamentos de tecla disparam o processamento correspondente.</p><p style="margin-top:14px">É correto o que se afirma em:</p>`,
+  alts:[
+    `I, apenas.`,
+    `II, apenas.`,
+    `I e III, apenas.`,
+    `II e III, apenas.`,
+    `I, II e III.`
+  ]
+},
+{
+  titulo:`QUESTÃO 10 — Paradigmas de Linguagens / Paradigma Lógico (Prolog)`,
+  enunciado:`<p style="font-style:italic;color:var(--muted);margin-bottom:6px">"O paradigma de programação lógica, cujo principal representante é a linguagem Prolog, baseia-se na definição de fatos e regras lógicas, a partir dos quais o sistema infere respostas por meio de um mecanismo de resolução e unificação."</p><p style="font-style:italic;font-size:.82em;color:var(--muted);margin-bottom:16px">(Baseado em literatura de linguagens de programação.)</p><p style="margin-bottom:10px">Avalie as afirmações a seguir.</p><p style="margin:10px 0"><strong>I.</strong> Em Prolog, o programador declara "o que" deve ser verdadeiro (fatos e regras), e não necessariamente "como" computar o resultado passo a passo, diferenciando-se nesse aspecto dos paradigmas imperativos.</p><p style="margin:10px 0"><strong>II.</strong> O mecanismo de "unificação" em Prolog é o processo pelo qual o motor de inferência tenta igualar termos (variáveis e estruturas) para verificar se uma consulta pode ser satisfeita pelos fatos e regras da base de conhecimento.</p><p style="margin:10px 0"><strong>III.</strong> Quando uma tentativa de prova falha em Prolog, o mecanismo de "backtracking" (retrocesso) permite que o sistema volte a pontos de decisão anteriores e explore alternativas diferentes, em vez de simplesmente encerrar a busca com falha.</p><p style="margin-top:14px">É correto o que se afirma em:</p>`,
+  alts:[
+    `I e II, apenas.`,
+    `I, apenas.`,
+    `II e III, apenas.`,
+    `I e III, apenas.`,
+    `I, II e III.`
+  ]
+},
+{
+  titulo:`QUESTÃO 11 — Pesquisa Operacional / Problema de Transporte`,
+  enunciado:`<p style="font-style:italic;color:var(--muted);margin-bottom:6px">"O problema de transporte, um caso particular de problema de programação linear, busca determinar o plano de distribuição de um produto entre múltiplas origens (fontes de oferta) e múltiplos destinos (pontos de demanda) que minimize o custo total de transporte, respeitando as restrições de oferta e demanda."</p><p style="font-style:italic;font-size:.82em;color:var(--muted);margin-bottom:16px">(Baseado em literatura de pesquisa operacional.)</p><p style="margin-bottom:10px">Avalie as afirmações a seguir.</p><p style="margin:10px 0"><strong>I.</strong> O método do canto noroeste (northwest corner method) é uma heurística utilizada para obter uma solução inicial viável para o problema de transporte, mas não garante, por si só, que essa solução seja a de menor custo possível.</p><p style="margin:10px 0"><strong>II.</strong> Para que um problema de transporte seja considerado "balanceado", a oferta total disponível nas origens deve ser igual à demanda total exigida pelos destinos.</p><p style="margin:10px 0"><strong>III.</strong> O problema de transporte é um tipo de problema de programação não linear, não podendo ser resolvido por métodos como o Simplex, que se aplicam exclusivamente a problemas lineares.</p><p style="margin-top:14px">É correto o que se afirma em:</p>`,
+  alts:[
+    `I, apenas.`,
+    `II, apenas.`,
+    `I e II, apenas.`,
+    `III, apenas.`,
+    `I, II e III.`
+  ]
+},
+{
+  titulo:`QUESTÃO 12 — Pesquisa Operacional / Árvore de Decisão`,
+  enunciado:`<p style="font-style:italic;color:var(--muted);margin-bottom:6px">"Árvores de decisão são ferramentas utilizadas em pesquisa operacional para representar e analisar problemas de decisão sequenciais sob condições de risco ou incerteza, estruturando pontos de decisão, eventos probabilísticos e resultados associados."</p><p style="font-style:italic;font-size:.82em;color:var(--muted);margin-bottom:16px">(Baseado em literatura de pesquisa operacional.)</p><p style="margin-bottom:10px">Avalie as afirmações a seguir.</p><p style="margin:10px 0"><strong>I.</strong> Em uma árvore de decisão, os "nós de decisão" representam pontos em que o tomador de decisão escolhe entre alternativas disponíveis, enquanto os "nós de probabilidade" (ou de evento) representam situações cujo resultado depende do acaso, associadas a probabilidades específicas.</p><p style="margin:10px 0"><strong>II.</strong> O critério do "valor esperado" calcula, para cada alternativa, a soma ponderada dos resultados possíveis pelas suas respectivas probabilidades, permitindo comparar alternativas sob risco com base em sua expectativa de retorno.</p><p style="margin:10px 0"><strong>III.</strong> Decisões sob incerteza (quando as probabilidades dos eventos não são conhecidas) são tratadas da mesma forma que decisões sob risco (quando as probabilidades são conhecidas), não havendo distinção metodológica entre os dois cenários.</p><p style="margin-top:14px">É correto o que se afirma em:</p>`,
+  alts:[
+    `I, apenas.`,
+    `I e II, apenas.`,
+    `III, apenas.`,
+    `II e III, apenas.`,
+    `I, II e III.`
+  ]
+},
+{
+  titulo:`QUESTÃO 13 — Fundamentos de SI e TGS / Componentes e Tipos de Sistemas de Informação`,
+  enunciado:`<p style="font-style:italic;color:var(--muted);margin-bottom:6px">"Um Sistema de Informação pode ser compreendido, de forma geral, como um conjunto de componentes inter-relacionados que coletam, processam, armazenam e distribuem informação para apoiar a tomada de decisão e o controle em uma organização, sendo classificados em diferentes tipos conforme o nível organizacional que atendem."</p><p style="font-style:italic;font-size:.82em;color:var(--muted);margin-bottom:16px">(Baseado em literatura de fundamentos de sistemas de informação.)</p><p style="margin-bottom:10px">Avalie as afirmações a seguir.</p><p style="margin:10px 0"><strong>I.</strong> Os componentes básicos de um Sistema de Informação incluem entrada (coleta de dados), processamento (transformação dos dados), saída (distribuição da informação processada) e retroalimentação (feedback), que permite avaliar e corrigir o próprio processo.</p><p style="margin:10px 0"><strong>II.</strong> Sistemas de Processamento de Transações (SPT) são tipicamente voltados ao nível operacional da organização, registrando as transações rotineiras do dia a dia (como vendas e pagamentos), enquanto Sistemas de Apoio à Decisão (SAD) são voltados a decisões gerenciais mais analíticas e não estruturadas.</p><p style="margin:10px 0"><strong>III.</strong> Sistemas Especialistas (SE), que buscam emular o raciocínio de um especialista humano em um domínio específico por meio de bases de conhecimento e regras de inferência, são classificados como um subtipo de Sistema de Processamento de Transações.</p><p style="margin-top:14px">É correto o que se afirma em:</p>`,
+  alts:[
+    `I, apenas.`,
+    `III, apenas.`,
+    `I e III, apenas.`,
+    `II e III, apenas.`,
+    `I e II, apenas.`
+  ]
+},
+{
+  titulo:`QUESTÃO 14 — Fundamentos de SI e TGS / Homeostase e Entropia`,
+  enunciado:`<p style="font-style:italic;color:var(--muted);margin-bottom:6px">"A Teoria Geral dos Sistemas (TGS), proposta por Ludwig von Bertalanffy, introduziu conceitos como homeostase e entropia para descrever o comportamento de sistemas complexos, incluindo os sistemas de informação organizacionais."</p><p style="font-style:italic;font-size:.82em;color:var(--muted);margin-bottom:16px">(Baseado em literatura de fundamentos de sistemas de informação.)</p><p style="margin-bottom:10px">Avalie as afirmações a seguir.</p><p style="margin:10px 0"><strong>I.</strong> A homeostase, em um sistema, refere-se à sua capacidade de se autorregular e manter um estado de equilíbrio relativamente estável diante de perturbações do ambiente externo.</p><p style="margin:10px 0"><strong>II.</strong> A entropia, em um sistema, é uma medida do seu grau de desordem ou desorganização, e sistemas fechados tendem, segundo a TGS, a aumentar sua entropia ao longo do tempo, caminhando para a desorganização.</p><p style="margin:10px 0"><strong>III.</strong> A "entropia negativa" (negentropia) é um conceito inaplicável a sistemas organizacionais, sendo restrito exclusivamente a sistemas físicos e termodinâmicos estudados pela física clássica.</p><p style="margin-top:14px">É correto o que se afirma em:</p>`,
+  alts:[
+    `I, apenas.`,
+    `II, apenas.`,
+    `III, apenas.`,
+    `I e II, apenas.`,
+    `I, II e III.`
+  ]
+},
+{
+  titulo:`QUESTÃO 15 — Arquitetura Corporativa e da Informação / Alinhamento Estratégico TI-Negócio`,
+  enunciado:`<p style="font-style:italic;color:var(--muted);margin-bottom:6px">"O Modelo de Alinhamento Estratégico (Strategic Alignment Model), proposto por Henderson e Venkatraman, descreve o alinhamento entre a estratégia de negócio e a estratégia de tecnologia da informação como um processo contínuo de ajuste mútuo entre quatro domínios: estratégia de negócio, estratégia de TI, infraestrutura organizacional e infraestrutura de TI."</p><p style="font-style:italic;font-size:.82em;color:var(--muted);margin-bottom:16px">(Baseado em literatura de arquitetura corporativa.)</p><p style="margin-bottom:10px">Avalie as afirmações a seguir.</p><p style="margin:10px 0"><strong>I.</strong> O alinhamento estratégico entre negócio e TI é tratado, nesse modelo, como um evento pontual e definitivo, que, uma vez alcançado, não exige revisão ou ajustes futuros.</p><p style="margin:10px 0"><strong>II.</strong> A ausência de alinhamento estratégico entre TI e negócio pode resultar em investimentos de tecnologia que não geram valor percebido pelas áreas de negócio, mesmo que tecnicamente bem executados.</p><p style="margin:10px 0"><strong>III.</strong> O modelo de alinhamento estratégico reconhece que mudanças na estratégia de negócio podem exigir ajustes correspondentes na estratégia de TI, e vice-versa, caracterizando uma relação de influência mútua entre os domínios.</p><p style="margin-top:14px">É correto o que se afirma em:</p>`,
+  alts:[
+    `I, apenas.`,
+    `I e II, apenas.`,
+    `I e III, apenas.`,
+    `I, II e III.`,
+    `II e III, apenas.`
+  ]
+},
+{
+  titulo:`QUESTÃO 16 — Arquitetura Corporativa e da Informação / Arquitetura da Informação em Portais`,
+  enunciado:`<p style="font-style:italic;color:var(--muted);margin-bottom:6px">"A arquitetura da informação organiza, estrutura e rotula conteúdos de forma a facilitar sua localização e compreensão, sendo a taxonomia, os metadados e os sistemas de navegação elementos centrais no projeto de portais corporativos e intranets."</p><p style="font-style:italic;font-size:.82em;color:var(--muted);margin-bottom:16px">(Baseado em literatura de arquitetura da informação.)</p><p style="margin-bottom:10px">Avalie as afirmações a seguir.</p><p style="margin:10px 0"><strong>I.</strong> Uma taxonomia bem estruturada organiza os conteúdos em categorias hierárquicas, facilitando a navegação do usuário por meio de uma estrutura previsível de pais e filhos.</p><p style="margin:10px 0"><strong>II.</strong> Os metadados em um portal corporativo (como autor, data de criação e palavras-chave) auxiliam mecanismos de busca interna a localizar conteúdos relevantes, mesmo quando o termo buscado não aparece literalmente no corpo do texto.</p><p style="margin:10px 0"><strong>III.</strong> Sistemas de navegação local (como menus contextuais específicos de uma seção) são redundantes e devem ser evitados sempre que exista uma navegação global (menu principal do site), pois duplicam a função de orientação do usuário.</p><p style="margin-top:14px">É correto o que se afirma em:</p>`,
+  alts:[
+    `I e II, apenas.`,
+    `I, apenas.`,
+    `III, apenas.`,
+    `II e III, apenas.`,
+    `I, II e III.`
+  ]
+},
+{
+  titulo:`QUESTÃO 17 — Governança de TI / Gestão de Riscos de TI`,
+  enunciado:`<p style="font-style:italic;color:var(--muted);margin-bottom:6px">"A gestão de riscos de TI envolve a identificação, avaliação e tratamento de eventos que possam comprometer os objetivos de tecnologia da informação de uma organização, sendo o apetite a risco e os mapas de calor (heat maps) ferramentas comumente utilizadas para priorizar riscos."</p><p style="font-style:italic;font-size:.82em;color:var(--muted);margin-bottom:16px">(Baseado em literatura de governança de TI.)</p><p style="margin-bottom:10px">Avalie as afirmações a seguir.</p><p style="margin:10px 0"><strong>I.</strong> O "apetite a risco" de uma organização representa o nível de risco que ela está disposta a aceitar na busca por seus objetivos, variando de organização para organização conforme seu perfil e setor de atuação.</p><p style="margin:10px 0"><strong>II.</strong> Um mapa de calor de riscos cruza, tipicamente, duas dimensões — a probabilidade de ocorrência e o impacto potencial de um risco — permitindo visualizar e priorizar quais riscos exigem atenção mais urgente.</p><p style="margin:10px 0"><strong>III.</strong> Uma vez identificado e avaliado, um risco de TI deve ser sempre eliminado por completo, sendo as estratégias de mitigação, transferência (como seguros) ou aceitação do risco consideradas práticas inadequadas de governança.</p><p style="margin-top:14px">É correto o que se afirma em:</p>`,
+  alts:[
+    `I, apenas.`,
+    `III, apenas.`,
+    `I e III, apenas.`,
+    `II e III, apenas.`,
+    `I e II, apenas.`
+  ]
+},
+{
+  titulo:`QUESTÃO 18 — Governança de TI / Três Linhas de Defesa`,
+  enunciado:`<p style="font-style:italic;color:var(--muted);margin-bottom:6px">"O modelo das Três Linhas de Defesa é um referencial amplamente adotado em governança, riscos e controles (GRC), que distribui responsabilidades de gestão de risco entre diferentes grupos dentro da organização, de forma a evitar lacunas ou sobreposições de controle."</p><p style="font-style:italic;font-size:.82em;color:var(--muted);margin-bottom:16px">(Baseado em literatura de governança de TI.)</p><p style="margin-bottom:10px">Avalie as afirmações a seguir.</p><p style="margin:10px 0"><strong>I.</strong> A primeira linha de defesa corresponde às áreas operacionais que possuem e gerenciam os riscos diretamente no dia a dia de suas atividades, sendo responsáveis pelos controles internos do próprio processo.</p><p style="margin:10px 0"><strong>II.</strong> A segunda linha de defesa, composta por funções como gestão de riscos e compliance, supervisiona e dá suporte à primeira linha, mas não deve ser confundida com a função de auditoria interna, tipicamente associada à terceira linha.</p><p style="margin:10px 0"><strong>III.</strong> A terceira linha de defesa (auditoria interna) deve se reportar diretamente às áreas operacionais que audita (primeira linha), de modo a garantir proximidade e agilidade na correção dos problemas identificados.</p><p style="margin-top:14px">É correto o que se afirma em:</p>`,
+  alts:[
+    `I, apenas.`,
+    `II, apenas.`,
+    `III, apenas.`,
+    `I e II, apenas.`,
+    `I, II e III.`
+  ]
+},
+{
+  titulo:`QUESTÃO 19 — Arquitetura de Computadores / Ciclo de Busca-Decodificação-Execução`,
+  enunciado:`<p style="font-style:italic;color:var(--muted);margin-bottom:6px">"O ciclo de instrução de um processador — composto, de forma simplificada, pelas etapas de busca (fetch), decodificação (decode) e execução (execute) — descreve o processo repetitivo pelo qual a Unidade Central de Processamento (CPU) processa cada instrução de um programa."</p><p style="font-style:italic;font-size:.82em;color:var(--muted);margin-bottom:16px">(Baseado em literatura de arquitetura de computadores.)</p><p style="margin-bottom:10px">Avalie as afirmações a seguir.</p><p style="margin:10px 0"><strong>I.</strong> Na etapa de busca (fetch), a próxima instrução a ser executada é lida da memória, com seu endereço indicado pelo registrador contador de programa (Program Counter, PC).</p><p style="margin:10px 0"><strong>II.</strong> Na etapa de decodificação (decode), a Unidade de Controle interpreta a instrução buscada, identificando qual operação deve ser realizada e quais operandos estão envolvidos.</p><p style="margin:10px 0"><strong>III.</strong> Após a etapa de execução, o contador de programa (PC) permanece inalterado, apontando novamente para a mesma instrução que acabou de ser executada, até que uma nova instrução seja manualmente carregada pelo usuário.</p><p style="margin-top:14px">É correto o que se afirma em:</p>`,
+  alts:[
+    `I, apenas.`,
+    `III, apenas.`,
+    `I e II, apenas.`,
+    `II e III, apenas.`,
+    `I, II e III.`
+  ]
+},
+{
+  titulo:`QUESTÃO 20 — Arquitetura de Computadores / Barramentos e Técnicas de E/S`,
+  enunciado:`<p style="font-style:italic;color:var(--muted);margin-bottom:6px">"A comunicação entre a CPU e os dispositivos de entrada e saída (E/S) pode ser realizada por diferentes técnicas, como o polling (varredura), as interrupções e o acesso direto à memória (DMA), cada uma com implicações distintas sobre o desempenho e a utilização da CPU."</p><p style="font-style:italic;font-size:.82em;color:var(--muted);margin-bottom:16px">(Baseado em literatura de arquitetura de computadores.)</p><p style="margin-bottom:10px">Avalie as afirmações a seguir.</p><p style="margin:10px 0"><strong>I.</strong> No polling, a CPU verifica repetidamente, em um laço de espera ativa, se um dispositivo de E/S está pronto para transferir dados, o que pode desperdiçar ciclos de processamento quando o dispositivo demora a ficar pronto.</p><p style="margin:10px 0"><strong>II.</strong> Nas interrupções, o dispositivo de E/S notifica a CPU quando está pronto para a transferência de dados, permitindo que a CPU execute outras tarefas enquanto aguarda, em vez de ficar em espera ativa.</p><p style="margin:10px 0"><strong>III.</strong> O DMA (Direct Memory Access) exige que todos os dados transferidos entre o dispositivo de E/S e a memória principal passem obrigatoriamente pelos registradores da CPU, que atua como intermediária em cada byte transferido.</p><p style="margin-top:14px">É correto o que se afirma em:</p>`,
+  alts:[
+    `I, apenas.`,
+    `I e II, apenas.`,
+    `III, apenas.`,
+    `II e III, apenas.`,
+    `I, II e III.`
+  ]
+},
+{
+  titulo:`QUESTÃO 21 — Arquitetura de Computadores / Lei de Amdahl`,
+  enunciado:`<p style="font-style:italic;color:var(--muted);margin-bottom:6px">"A Lei de Amdahl estabelece um limite teórico para o ganho de desempenho (speedup) que pode ser obtido ao paralelizar um programa, em função da fração do programa que necessariamente permanece sequencial (não paralelizável)."</p><p style="font-style:italic;font-size:.82em;color:var(--muted);margin-bottom:16px">(Baseado em literatura de arquitetura de computadores.)</p><p style="margin-bottom:10px">Avalie as afirmações a seguir.</p><p style="margin:10px 0"><strong>I.</strong> Segundo a Lei de Amdahl, mesmo que uma fração muito pequena de um programa seja inerentemente sequencial, essa fração impõe um limite superior ao ganho de desempenho máximo alcançável, independentemente de quantos processadores adicionais sejam utilizados.</p><p style="margin:10px 0"><strong>II.</strong> A Lei de Amdahl implica que, para programas com uma parcela sequencial significativa, adicionar mais processadores sempre resulta em um ganho de desempenho proporcional e ilimitado, sem nenhum efeito de diminuição de retornos.</p><p style="margin:10px 0"><strong>III.</strong> A Lei de Amdahl é frequentemente utilizada para avaliar se o investimento em paralelização de uma determinada aplicação é economicamente e tecnicamente justificável, dado seu potencial real de ganho de desempenho.</p><p style="margin-top:14px">É correto o que se afirma em:</p>`,
+  alts:[
+    `I, apenas.`,
+    `II, apenas.`,
+    `II e III, apenas.`,
+    `I e III, apenas.`,
+    `I, II e III.`
+  ]
+},
+{
+  titulo:`QUESTÃO 22 — Sistemas Operacionais / Threads vs. Processos`,
+  enunciado:`<p style="font-style:italic;color:var(--muted);margin-bottom:6px">"Um processo é uma instância de um programa em execução, com seu próprio espaço de endereçamento isolado, enquanto uma thread é uma unidade de execução mais leve que pode compartilhar recursos, como memória, com outras threads do mesmo processo."</p><p style="font-style:italic;font-size:.82em;color:var(--muted);margin-bottom:16px">(Baseado em literatura de sistemas operacionais.)</p><p style="margin-bottom:10px">Avalie as afirmações a seguir.</p><p style="margin:10px 0"><strong>I.</strong> Threads de um mesmo processo compartilham o mesmo espaço de memória, o que torna a comunicação entre elas mais rápida do que a comunicação entre processos distintos, mas também introduz riscos de condições de corrida (race conditions) quando não sincronizadas adequadamente.</p><p style="margin:10px 0"><strong>II.</strong> A troca de contexto (context switch) entre threads de um mesmo processo é, em geral, mais custosa computacionalmente do que a troca de contexto entre processos distintos, pois exige a realocação completa do espaço de memória.</p><p style="margin:10px 0"><strong>III.</strong> Um processo pode conter uma ou mais threads; quando contém apenas uma única thread de execução, é denominado processo single-threaded (de thread única).</p><p style="margin-top:14px">É correto o que se afirma em:</p>`,
+  alts:[
+    `I e III, apenas.`,
+    `I, apenas.`,
+    `II, apenas.`,
+    `II e III, apenas.`,
+    `I, II e III.`
+  ]
+},
+{
+  titulo:`QUESTÃO 23 — Sistemas Operacionais / Produtor-Consumidor e Semáforos`,
+  enunciado:`<p style="font-style:italic;color:var(--muted);margin-bottom:6px">"O problema do produtor-consumidor é um clássico problema de sincronização em sistemas operacionais, no qual processos produtores inserem itens em um buffer compartilhado e processos consumidores retiram esses itens, exigindo mecanismos de sincronização como semáforos para evitar inconsistências."</p><p style="font-style:italic;font-size:.82em;color:var(--muted);margin-bottom:16px">(Baseado em literatura de sistemas operacionais.)</p><p style="margin-bottom:10px">Avalie as afirmações a seguir.</p><p style="margin:10px 0"><strong>I.</strong> Um semáforo binário (mutex) pode ser utilizado para garantir exclusão mútua, assegurando que apenas um processo por vez acesse a região crítica do buffer compartilhado.</p><p style="margin:10px 0"><strong>II.</strong> Semáforos de contagem podem ser utilizados para controlar o número de espaços livres e de itens disponíveis no buffer, bloqueando o produtor quando o buffer está cheio e bloqueando o consumidor quando o buffer está vazio.</p><p style="margin:10px 0"><strong>III.</strong> O uso de semáforos elimina completamente a possibilidade de ocorrência de deadlock no problema do produtor-consumidor, independentemente de como sejam implementados pelo programador.</p><p style="margin-top:14px">É correto o que se afirma em:</p>`,
+  alts:[
+    `I, apenas.`,
+    `III, apenas.`,
+    `I e II, apenas.`,
+    `II e III, apenas.`,
+    `I, II e III.`
+  ]
+},
+{
+  titulo:`QUESTÃO 24 — Sistemas Operacionais / Sistemas de Arquivos`,
+  enunciado:`<p style="font-style:italic;color:var(--muted);margin-bottom:6px">"Sistemas de arquivos podem utilizar diferentes estratégias para alocar blocos de armazenamento a um arquivo, como a alocação contígua, a alocação encadeada e a alocação indexada, cada uma com vantagens e desvantagens em termos de desempenho e fragmentação."</p><p style="font-style:italic;font-size:.82em;color:var(--muted);margin-bottom:16px">(Baseado em literatura de sistemas operacionais.)</p><p style="margin-bottom:10px">Avalie as afirmações a seguir.</p><p style="margin:10px 0"><strong>I.</strong> Na alocação contígua, os blocos de um arquivo são armazenados em posições sequenciais e adjacentes no disco, o que favorece o acesso sequencial rápido, mas é suscetível à fragmentação externa ao longo do tempo.</p><p style="margin:10px 0"><strong>II.</strong> Na alocação encadeada, cada bloco do arquivo contém um ponteiro para o próximo bloco, eliminando a fragmentação externa, mas tornando o acesso aleatório (direto) ineficiente, pois exige percorrer a cadeia de blocos sequencialmente.</p><p style="margin:10px 0"><strong>III.</strong> Na alocação indexada, um bloco especial (bloco de índice) armazena os endereços de todos os blocos do arquivo, o que não permite acesso direto (aleatório) eficiente a um bloco específico, exigindo sempre uma varredura sequencial dos ponteiros de bloco em bloco, assim como na alocação encadeada.</p><p style="margin-top:14px">É correto o que se afirma em:</p>`,
+  alts:[
+    `I e II, apenas.`,
+    `I, apenas.`,
+    `III, apenas.`,
+    `II e III, apenas.`,
+    `I, II e III.`
+  ]
+},
+{
+  titulo:`QUESTÃO 25 — Redes de Computadores / DNS`,
+  enunciado:`<p style="font-style:italic;color:var(--muted);margin-bottom:6px">"O Sistema de Nomes de Domínio (DNS, Domain Name System) é responsável por traduzir nomes de domínio legíveis por humanos (como www.exemplo.com.br) em endereços IP numéricos, operando por meio de uma estrutura hierárquica e distribuída de servidores."</p><p style="font-style:italic;font-size:.82em;color:var(--muted);margin-bottom:16px">(Baseado em literatura de redes de computadores.)</p><p style="margin-bottom:10px">Avalie as afirmações a seguir.</p><p style="margin:10px 0"><strong>I.</strong> A estrutura do DNS é hierárquica, partindo dos servidores raiz (root), passando pelos servidores de domínio de topo (TLD, como ".br" ou ".com"), até os servidores autoritativos responsáveis por um domínio específico.</p><p style="margin:10px 0"><strong>II.</strong> O cache de DNS, mantido tanto por servidores intermediários quanto por dispositivos clientes, armazena temporariamente resultados de consultas anteriores, reduzindo o tempo de resposta e a carga sobre os servidores autoritativos em consultas repetidas.</p><p style="margin:10px 0"><strong>III.</strong> Cada consulta DNS exige obrigatoriamente uma comunicação direta com o servidor raiz da internet, não havendo possibilidade de resolução de nomes sem essa etapa inicial.</p><p style="margin-top:14px">É correto o que se afirma em:</p>`,
+  alts:[
+    `I, apenas.`,
+    `II, apenas.`,
+    `I e II, apenas.`,
+    `III, apenas.`,
+    `I, II e III.`
+  ]
+},
+{
+  titulo:`QUESTÃO 26 — Redes de Computadores / Comutação de Circuitos vs. Comutação de Pacotes`,
+  enunciado:`<p style="font-style:italic;color:var(--muted);margin-bottom:6px">"As redes de comunicação podem operar segundo diferentes paradigmas de comutação, sendo a comutação de circuitos e a comutação de pacotes dois dos modelos fundamentais, com implicações distintas sobre a utilização dos recursos da rede."</p><p style="font-style:italic;font-size:.82em;color:var(--muted);margin-bottom:16px">(Baseado em literatura de redes de computadores.)</p><p style="margin-bottom:10px">Avalie as afirmações a seguir.</p><p style="margin:10px 0"><strong>I.</strong> Na comutação de circuitos, como na telefonia tradicional, um caminho dedicado de comunicação é estabelecido e reservado entre origem e destino durante toda a duração da chamada, independentemente de haver ou não transmissão efetiva de dados no momento.</p><p style="margin:10px 0"><strong>II.</strong> Na comutação de pacotes, como na internet, os dados são divididos em pacotes que podem seguir caminhos diferentes até o destino, compartilhando dinamicamente os recursos da rede com outras comunicações simultâneas.</p><p style="margin:10px 0"><strong>III.</strong> A comutação de pacotes garante, por sua própria natureza, que todos os pacotes de uma mesma comunicação cheguem ao destino na mesma ordem em que foram enviados, não sendo necessário nenhum mecanismo adicional de reordenação.</p><p style="margin-top:14px">É correto o que se afirma em:</p>`,
+  alts:[
+    `I, apenas.`,
+    `I e II, apenas.`,
+    `III, apenas.`,
+    `II e III, apenas.`,
+    `I, II e III.`
+  ]
+},
+{
+  titulo:`QUESTÃO 27 — Redes de Computadores / Consistência Eventual e Replicação`,
+  enunciado:`<p style="font-style:italic;color:var(--muted);margin-bottom:6px">"Em sistemas distribuídos, a replicação de dados entre múltiplos nós melhora a disponibilidade e a tolerância a falhas, mas introduz desafios relacionados à consistência entre as réplicas, sendo a consistência eventual um dos modelos adotados para equilibrar disponibilidade e consistência."</p><p style="font-style:italic;font-size:.82em;color:var(--muted);margin-bottom:16px">(Baseado em literatura de sistemas distribuídos.)</p><p style="margin-bottom:10px">Avalie as afirmações a seguir.</p><p style="margin:10px 0"><strong>I.</strong> Na consistência eventual, não há garantia de que todas as réplicas de um dado estejam sincronizadas no exato momento de uma leitura, mas garante-se que, na ausência de novas atualizações, todas as réplicas eventualmente convergirão para o mesmo valor.</p><p style="margin:10px 0"><strong>II.</strong> Sistemas que adotam consistência eventual são, tipicamente, uma escolha de projeto associada a cenários que priorizam alta disponibilidade e tolerância a partições de rede, em detrimento da consistência forte e imediata entre réplicas — um trade-off relacionado ao Teorema CAP.</p><p style="margin:10px 0"><strong>III.</strong> A consistência eventual é funcionalmente idêntica à consistência forte (strong consistency), não havendo nenhuma diferença prática de comportamento observável entre os dois modelos para o usuário final da aplicação.</p><p style="margin-top:14px">É correto o que se afirma em:</p>`,
+  alts:[
+    `I, apenas.`,
+    `III, apenas.`,
+    `I e III, apenas.`,
+    `II e III, apenas.`,
+    `I e II, apenas.`
+  ]
+},
+{
+  titulo:`QUESTÃO 28 — Engenharia de Software / Modelo em V`,
+  enunciado:`<p style="font-style:italic;color:var(--muted);margin-bottom:6px">"O Modelo em V é um modelo de processo de desenvolvimento de software que associa explicitamente cada fase de desenvolvimento a uma fase correspondente de teste, representando visualmente essas associações em forma da letra V, com a fase de codificação no vértice inferior."</p><p style="font-style:italic;font-size:.82em;color:var(--muted);margin-bottom:16px">(Baseado em literatura de engenharia de software.)</p><p style="margin-bottom:10px">Avalie as afirmações a seguir.</p><p style="margin:10px 0"><strong>I.</strong> No Modelo em V, a fase de "especificação de requisitos", no lado esquerdo (descendente) do V, corresponde diretamente à fase de "teste de aceitação", no lado direito (ascendente) do V, que verifica se o sistema atende aos requisitos especificados.</p><p style="margin:10px 0"><strong>II.</strong> O Modelo em V, assim como o Modelo em Cascata, pressupõe que as fases de desenvolvimento sejam executadas de forma sequencial, com as atividades de teste concentradas, em sua lógica original, ao final de cada fase correspondente de desenvolvimento.</p><p style="margin:10px 0"><strong>III.</strong> O Modelo em V elimina totalmente a necessidade de testes de unidade durante a implementação, pois toda a verificação do sistema é realizada exclusivamente ao final do projeto, por meio de testes de aceitação.</p><p style="margin-top:14px">É correto o que se afirma em:</p>`,
+  alts:[
+    `I e II, apenas.`,
+    `I, apenas.`,
+    `III, apenas.`,
+    `II e III, apenas.`,
+    `I, II e III.`
+  ]
+},
+{
+  titulo:`QUESTÃO 29 — Engenharia de Software / Métricas Ágeis`,
+  enunciado:`<p style="font-style:italic;color:var(--muted);margin-bottom:6px">"Em metodologias ágeis, métricas como a velocidade (velocity) da equipe e o gráfico de burndown são utilizadas para acompanhar o progresso do trabalho ao longo de uma sprint ou de um projeto, apoiando o planejamento e a previsibilidade das entregas."</p><p style="font-style:italic;font-size:.82em;color:var(--muted);margin-bottom:16px">(Baseado em literatura de engenharia de software.)</p><p style="margin-bottom:10px">Avalie as afirmações a seguir.</p><p style="margin:10px 0"><strong>I.</strong> A velocidade (velocity) de uma equipe Scrum mede a quantidade de trabalho (geralmente expressa em pontos de história) que a equipe consegue concluir, em média, por sprint, sendo útil para estimar a capacidade de sprints futuras.</p><p style="margin:10px 0"><strong>II.</strong> Um gráfico de burndown mostra a quantidade de trabalho restante ao longo do tempo em uma sprint, sendo esperado que a linha de trabalho restante decresça progressivamente até chegar a zero ao final da sprint, caso o planejamento esteja sendo seguido.</p><p style="margin:10px 0"><strong>III.</strong> A velocidade de uma equipe é uma métrica absoluta e diretamente comparável entre equipes diferentes, podendo ser utilizada de forma confiável para avaliar qual equipe é mais produtiva dentro de uma organização.</p><p style="margin-top:14px">É correto o que se afirma em:</p>`,
+  alts:[
+    `I, apenas.`,
+    `II, apenas.`,
+    `III, apenas.`,
+    `I e II, apenas.`,
+    `I, II e III.`
+  ]
+},
+{
+  titulo:`QUESTÃO 30 — Engenharia de Software / Padrões de Projeto (GoF)`,
+  enunciado:`<p style="font-style:italic;color:var(--muted);margin-bottom:6px">"Os padrões de projeto (design patterns), catalogados de forma clássica pelo 'Gang of Four' (GoF), descrevem soluções reutilizáveis para problemas recorrentes no projeto de software orientado a objetos, sendo classificados em padrões criacionais, estruturais e comportamentais."</p><p style="font-style:italic;font-size:.82em;color:var(--muted);margin-bottom:16px">(Baseado em literatura de engenharia de software.)</p><p style="margin-bottom:10px">Avalie as afirmações a seguir.</p><p style="margin:10px 0"><strong>I.</strong> O padrão Singleton garante que uma classe tenha apenas uma única instância em todo o sistema, fornecendo um ponto de acesso global a essa instância — sendo classificado como um padrão criacional.</p><p style="margin:10px 0"><strong>II.</strong> O padrão Factory Method define uma interface para criação de objetos, delegando às subclasses a decisão de qual classe concreta instanciar, o que permite desacoplar o código cliente da criação direta de classes específicas.</p><p style="margin:10px 0"><strong>III.</strong> O padrão Observer é classificado como um padrão criacional, pois sua principal função é "criar" uma lista de objetos observadores a serem notificados sobre mudanças em um objeto observado.</p><p style="margin-top:14px">É correto o que se afirma em:</p>`,
+  alts:[
+    `I, apenas.`,
+    `I e II, apenas.`,
+    `III, apenas.`,
+    `II e III, apenas.`,
+    `I, II e III.`
+  ]
+},
+{
+  titulo:`QUESTÃO 31 — Concepção e Modelagem de SI / Diagrama de Sequência UML`,
+  enunciado:`<p style="font-style:italic;color:var(--muted);margin-bottom:6px">"O diagrama de sequência da UML representa a interação entre objetos ao longo do tempo, destacando a ordem temporal das mensagens trocadas entre eles durante a execução de um cenário específico do sistema."</p><p style="font-style:italic;font-size:.82em;color:var(--muted);margin-bottom:16px">(Baseado em literatura de engenharia de requisitos e UML.)</p><p style="margin-bottom:10px">Avalie as afirmações a seguir.</p><p style="margin:10px 0"><strong>I.</strong> No diagrama de sequência, a "linha de vida" (lifeline) de um objeto é representada por uma linha vertical tracejada, ao longo da qual o tempo flui de cima para baixo, indicando a existência do objeto durante o cenário representado.</p><p style="margin:10px 0"><strong>II.</strong> Mensagens síncronas, representadas por setas com ponta cheia, indicam que o objeto remetente aguarda uma resposta do objeto destinatário antes de continuar sua execução, enquanto mensagens assíncronas, representadas por setas com ponta aberta, não exigem essa espera.</p><p style="margin:10px 0"><strong>III.</strong> O diagrama de sequência é utilizado exclusivamente durante a fase de implementação de um sistema, não tendo nenhuma utilidade durante as fases de análise e concepção de requisitos.</p><p style="margin-top:14px">É correto o que se afirma em:</p>`,
+  alts:[
+    `I, apenas.`,
+    `I e II, apenas.`,
+    `III, apenas.`,
+    `II e III, apenas.`,
+    `I, II e III.`
+  ]
+},
+{
+  titulo:`QUESTÃO 32 — Concepção e Modelagem de SI / MER vs. Diagrama de Classes UML`,
+  enunciado:`<p style="font-style:italic;color:var(--muted);margin-bottom:6px">"O Modelo Entidade-Relacionamento (MER) e o Diagrama de Classes da UML são duas notações utilizadas na concepção de sistemas de informação para representar, respectivamente, a estrutura de dados de um banco de dados e a estrutura de objetos de um sistema orientado a objetos, compartilhando semelhanças conceituais, mas com propósitos e elementos distintos."</p><p style="font-style:italic;font-size:.82em;color:var(--muted);margin-bottom:16px">(Baseado em literatura de engenharia de requisitos e UML.)</p><p style="margin-bottom:10px">Avalie as afirmações a seguir.</p><p style="margin:10px 0"><strong>I.</strong> O MER é tradicionalmente utilizado para a modelagem conceitual de bancos de dados relacionais, representando entidades, atributos e relacionamentos, enquanto o Diagrama de Classes representa classes, atributos, métodos e os relacionamentos entre elas em um contexto orientado a objetos.</p><p style="margin:10px 0"><strong>II.</strong> Diferentemente das entidades do MER, as classes em um Diagrama de Classes podem encapsular tanto atributos (dados) quanto métodos (comportamentos), refletindo o princípio de encapsulamento da orientação a objetos.</p><p style="margin:10px 0"><strong>III.</strong> O MER e o Diagrama de Classes são notações idênticas, utilizando exatamente os mesmos símbolos gráficos para representar entidades/classes e seus relacionamentos, não havendo nenhuma diferença notacional entre eles.</p><p style="margin-top:14px">É correto o que se afirma em:</p>`,
+  alts:[
+    `I e II, apenas.`,
+    `I, apenas.`,
+    `III, apenas.`,
+    `II e III, apenas.`,
+    `I, II e III.`
+  ]
+},
+{
+  titulo:`QUESTÃO 33 — Gerenciamento de Projetos / Matriz de Probabilidade x Impacto`,
+  enunciado:`<p style="font-style:italic;color:var(--muted);margin-bottom:6px">"A gestão de riscos em projetos envolve identificar, analisar e priorizar riscos potenciais, sendo a matriz de probabilidade e impacto uma ferramenta comum para classificar riscos conforme sua chance de ocorrência e a magnitude de suas consequências sobre o projeto."</p><p style="font-style:italic;font-size:.82em;color:var(--muted);margin-bottom:16px">(Baseado em literatura de gerenciamento de projetos.)</p><p style="margin-bottom:10px">Avalie as afirmações a seguir.</p><p style="margin:10px 0"><strong>I.</strong> Um risco classificado com alta probabilidade de ocorrência e alto impacto potencial sobre o projeto deve, em geral, receber prioridade de atenção e de resposta mais alta do que um risco de baixa probabilidade e baixo impacto.</p><p style="margin:10px 0"><strong>II.</strong> A matriz de probabilidade e impacto é utilizada exclusivamente na fase de encerramento do projeto, como um relatório retrospectivo dos riscos que efetivamente ocorreram, não tendo utilidade durante o planejamento ou a execução do projeto.</p><p style="margin:10px 0"><strong>III.</strong> As estratégias de resposta a riscos negativos (ameaças) incluem, entre outras, evitar, mitigar, transferir e aceitar o risco, cabendo à equipe de projeto escolher a estratégia mais adequada conforme a natureza e a prioridade do risco identificado.</p><p style="margin-top:14px">É correto o que se afirma em:</p>`,
+  alts:[
+    `I, apenas.`,
+    `II, apenas.`,
+    `II e III, apenas.`,
+    `I e III, apenas.`,
+    `I, II e III.`
+  ]
+},
+{
+  titulo:`QUESTÃO 34 — Gerenciamento de Projetos / EAP (WBS)`,
+  enunciado:`<p style="font-style:italic;color:var(--muted);margin-bottom:6px">"A Estrutura Analítica do Projeto (EAP), também conhecida pela sigla em inglês WBS (Work Breakdown Structure), decompõe hierarquicamente o escopo total do projeto em pacotes de trabalho menores e mais gerenciáveis."</p><p style="font-style:italic;font-size:.82em;color:var(--muted);margin-bottom:16px">(Baseado em literatura de gerenciamento de projetos.)</p><p style="margin-bottom:10px">Avalie as afirmações a seguir.</p><p style="margin:10px 0"><strong>I.</strong> A EAP organiza o trabalho do projeto de forma hierárquica, decompondo entregas maiores em componentes progressivamente menores, até o nível de "pacotes de trabalho", unidades passíveis de estimativa de custo e duração.</p><p style="margin:10px 0"><strong>II.</strong> O menor nível de decomposição de uma EAP é denominado "pacote de trabalho" (work package), e, a partir dele, é possível estimar custos, prazos e recursos necessários com maior precisão do que em níveis superiores, mais agregados, da estrutura.</p><p style="margin:10px 0"><strong>III.</strong> A EAP foca exclusivamente nas atividades e na sequência cronológica de execução do projeto, sendo funcionalmente equivalente a um cronograma ou diagrama de rede do projeto.</p><p style="margin-top:14px">É correto o que se afirma em:</p>`,
+  alts:[
+    `I, apenas.`,
+    `III, apenas.`,
+    `I e III, apenas.`,
+    `II e III, apenas.`,
+    `I e II, apenas.`
+  ]
+},
+{
+  titulo:`QUESTÃO 35 — Processos de Negócio / Notação BPMN — Elementos Básicos`,
+  enunciado:`<p style="font-style:italic;color:var(--muted);margin-bottom:6px">"A notação BPMN (Business Process Model and Notation) oferece um conjunto padronizado de símbolos gráficos — como eventos, atividades, gateways e raias (lanes) — para representar processos de negócio de forma clara e compreensível tanto para analistas técnicos quanto para gestores de negócio."</p><p style="font-style:italic;font-size:.82em;color:var(--muted);margin-bottom:16px">(Baseado em literatura de modelagem de processos de negócio.)</p><p style="margin-bottom:10px">Avalie as afirmações a seguir.</p><p style="margin:10px 0"><strong>I.</strong> Os "gateways" (portões) em BPMN representam pontos de decisão ou de convergência/divergência no fluxo do processo, como um gateway exclusivo (XOR), que direciona o fluxo por apenas um caminho entre várias opções possíveis.</p><p style="margin:10px 0"><strong>II.</strong> As "raias" (lanes), organizadas dentro de "pools" (piscinas), são utilizadas para indicar qual papel, departamento ou participante é responsável por executar cada atividade representada no diagrama do processo.</p><p style="margin:10px 0"><strong>III.</strong> Um evento de início (start event), representado por um círculo com borda fina, e um evento de fim (end event), representado por um círculo com borda grossa, podem aparecer, no máximo, uma única vez em qualquer diagrama BPMN, independentemente da complexidade do processo modelado.</p><p style="margin-top:14px">É correto o que se afirma em:</p>`,
+  alts:[
+    `I, apenas.`,
+    `III, apenas.`,
+    `I e II, apenas.`,
+    `II e III, apenas.`,
+    `I, II e III.`
+  ]
+},
+{
+  titulo:`QUESTÃO 36 — Processos de Negócio / BPR vs. Kaizen`,
+  enunciado:`<p style="font-style:italic;color:var(--muted);margin-bottom:6px">"A Reengenharia de Processos de Negócio (Business Process Reengineering, BPR) e a Melhoria Contínua (Kaizen) representam duas abordagens distintas para a transformação de processos organizacionais, diferindo quanto à amplitude, à velocidade e ao risco das mudanças propostas."</p><p style="font-style:italic;font-size:.82em;color:var(--muted);margin-bottom:16px">(Baseado em literatura de modelagem e gestão de processos de negócio.)</p><p style="margin-bottom:10px">Avalie as afirmações a seguir.</p><p style="margin:10px 0"><strong>I.</strong> A Reengenharia de Processos de Negócio (BPR) propõe mudanças radicais e abrangentes nos processos existentes, frequentemente redesenhando-os "do zero", em contraste com abordagens incrementais de melhoria.</p><p style="margin:10px 0"><strong>II.</strong> O Kaizen, por sua vez, caracteriza-se por mudanças pequenas, incrementais e contínuas, geralmente promovidas pelos próprios colaboradores envolvidos no processo, com menor risco e menor disrupção organizacional do que a BPR.</p><p style="margin:10px 0"><strong>III.</strong> A BPR e o Kaizen são abordagens mutuamente excludentes, de modo que uma organização que adota a reengenharia de processos não pode, em nenhuma circunstância, utilizar práticas de melhoria contínua posteriormente.</p><p style="margin-top:14px">É correto o que se afirma em:</p>`,
+  alts:[
+    `I, apenas.`,
+    `III, apenas.`,
+    `I e III, apenas.`,
+    `II e III, apenas.`,
+    `I e II, apenas.`
+  ]
+},
+{
+  titulo:`QUESTÃO 37 — Interação Humano-Computador / Lei de Miller e Carga Cognitiva`,
+  enunciado:`<p style="font-style:italic;color:var(--muted);margin-bottom:6px">"A chamada 'Lei de Miller', derivada do artigo clássico de George Miller de 1956, sugere que a memória de curto prazo humana é capaz de reter, em média, entre 5 e 9 itens de informação simultaneamente (a regra do '7 mais ou menos 2'), sendo frequentemente citada no projeto de interfaces para limitar a carga cognitiva imposta ao usuário."</p><p style="font-style:italic;font-size:.82em;color:var(--muted);margin-bottom:16px">(Baseado em literatura de interação humano-computador.)</p><p style="margin-bottom:10px">Avalie as afirmações a seguir.</p><p style="margin:10px 0"><strong>I.</strong> A Lei de Miller é frequentemente utilizada como justificativa para limitar o número de itens apresentados simultaneamente em um menu de navegação, de forma a não sobrecarregar a memória de curto prazo do usuário.</p><p style="margin:10px 0"><strong>II.</strong> O conceito de "agrupamento" (chunking) refere-se à estratégia cognitiva de organizar itens de informação individuais em unidades maiores e mais significativas, o que permite ao usuário processar mentalmente uma quantidade efetiva de informação maior do que sugeriria uma contagem item a item.</p><p style="margin:10px 0"><strong>III.</strong> A Lei de Miller é uma lei física imutável, com validade comprovada de forma idêntica para qualquer tipo de informação e qualquer contexto de interface, não estando sujeita a críticas ou reinterpretações na literatura contemporânea de IHC.</p><p style="margin-top:14px">É correto o que se afirma em:</p>`,
+  alts:[
+    `I, apenas.`,
+    `II, apenas.`,
+    `III, apenas.`,
+    `I e II, apenas.`,
+    `I, II e III.`
+  ]
+},
+{
+  titulo:`QUESTÃO 38 — Interação Humano-Computador / Padrões de Leitura (F e Z)`,
+  enunciado:`<p style="font-style:italic;color:var(--muted);margin-bottom:6px">"Estudos de rastreamento ocular (eye-tracking) aplicados à usabilidade identificaram padrões recorrentes de leitura e varredura visual em páginas e interfaces digitais, como o chamado 'padrão F' e o 'padrão Z', utilizados para orientar decisões de layout e hierarquia visual."</p><p style="font-style:italic;font-size:.82em;color:var(--muted);margin-bottom:16px">(Baseado em literatura de interação humano-computador.)</p><p style="margin-bottom:10px">Avalie as afirmações a seguir.</p><p style="margin:10px 0"><strong>I.</strong> O "padrão F", identificado em estudos de eye-tracking sobre páginas web com muito texto, descreve uma tendência dos usuários de ler horizontalmente o topo da página, depois outra linha horizontal um pouco mais abaixo, e então percorrer verticalmente a lateral esquerda em busca de palavras-chave.</p><p style="margin:10px 0"><strong>II.</strong> O "padrão Z" é mais associado a páginas com menos texto e maior ênfase visual, em que o olhar do usuário tende a percorrer o topo da página da esquerda para a direita, depois diagonalmente até o canto inferior esquerdo, e então novamente da esquerda para a direita na parte inferior.</p><p style="margin:10px 0"><strong>III.</strong> Estudos de eye-tracking demonstraram que o padrão de leitura dos usuários é absolutamente fixo e idêntico para todos os tipos de interface, não sendo influenciado pela quantidade de texto, pela hierarquia visual ou pelo propósito da página.</p><p style="margin-top:14px">É correto o que se afirma em:</p>`,
+  alts:[
+    `I, apenas.`,
+    `I e II, apenas.`,
+    `III, apenas.`,
+    `II e III, apenas.`,
+    `I, II e III.`
+  ]
+},
+{
+  titulo:`QUESTÃO 39 — Segurança da Informação / Tipos de Firewall`,
+  enunciado:`<p style="font-style:italic;color:var(--muted);margin-bottom:6px">"Um firewall é um mecanismo de segurança que controla o tráfego de rede com base em um conjunto de regras predefinidas, existindo diferentes gerações e tipos de firewall, como o filtro de pacotes, o firewall de estado (stateful) e o firewall de próxima geração (NGFW)."</p><p style="font-style:italic;font-size:.82em;color:var(--muted);margin-bottom:16px">(Baseado em literatura de segurança da informação.)</p><p style="margin-bottom:10px">Avalie as afirmações a seguir.</p><p style="margin:10px 0"><strong>I.</strong> Um firewall de filtro de pacotes (packet filter) toma decisões de permitir ou bloquear tráfego com base em informações isoladas de cada pacote, como endereços IP e portas de origem/destino, sem considerar o contexto da conexão à qual o pacote pertence.</p><p style="margin:10px 0"><strong>II.</strong> Um firewall de estado (stateful) mantém uma tabela de estado das conexões ativas, permitindo que ele diferencie um pacote legítimo de resposta a uma conexão já estabelecida de um pacote não solicitado, aumentando a precisão do controle de tráfego em relação ao filtro de pacotes simples.</p><p style="margin:10px 0"><strong>III.</strong> Um firewall de próxima geração (NGFW, Next-Generation Firewall) é tecnicamente idêntico a um firewall de filtro de pacotes tradicional, apenas com uma interface gráfica mais moderna, não incorporando nenhuma capacidade adicional de inspeção de tráfego.</p><p style="margin-top:14px">É correto o que se afirma em:</p>`,
+  alts:[
+    `I, apenas.`,
+    `III, apenas.`,
+    `I e II, apenas.`,
+    `II e III, apenas.`,
+    `I, II e III.`
+  ]
+},
+{
+  titulo:`QUESTÃO 40 — Segurança da Informação / RPO e RTO`,
+  enunciado:`<p style="font-style:italic;color:var(--muted);margin-bottom:6px">"O planejamento de backup e recuperação de desastres utiliza métricas como o RPO (Recovery Point Objective) e o RTO (Recovery Time Objective) para definir, respectivamente, a perda máxima aceitável de dados e o tempo máximo aceitável de indisponibilidade de um sistema após um incidente."</p><p style="font-style:italic;font-size:.82em;color:var(--muted);margin-bottom:16px">(Baseado em literatura de segurança da informação.)</p><p style="margin-bottom:10px">Avalie as afirmações a seguir.</p><p style="margin:10px 0"><strong>I.</strong> O RPO (Recovery Point Objective) define o ponto no tempo até o qual os dados devem ser recuperados após um incidente, determinando, na prática, a frequência máxima aceitável entre backups consecutivos — um RPO de 1 hora exige, por exemplo, backups com intervalo máximo de 1 hora.</p><p style="margin:10px 0"><strong>II.</strong> O RTO (Recovery Time Objective) define o tempo máximo aceitável que um sistema pode permanecer indisponível após um incidente, até que suas operações normais sejam restabelecidas.</p><p style="margin:10px 0"><strong>III.</strong> Um RPO e um RTO iguais a zero são sempre tecnicamente triviais e de baixo custo de implementação para qualquer organização, independentemente da criticidade ou do porte dos sistemas envolvidos.</p><p style="margin-top:14px">É correto o que se afirma em:</p>`,
+  alts:[
+    `I e II, apenas.`,
+    `I, apenas.`,
+    `III, apenas.`,
+    `II e III, apenas.`,
+    `I, II e III.`
+  ]
+},
+{
+  titulo:`QUESTÃO 41 — Segurança da Informação / RBAC, DAC e MAC`,
+  enunciado:`<p style="font-style:italic;color:var(--muted);margin-bottom:6px">"Modelos de controle de acesso definem como as permissões de acesso a recursos de um sistema são concedidas e geridas, sendo o RBAC (Role-Based Access Control), o DAC (Discretionary Access Control) e o MAC (Mandatory Access Control) três modelos amplamente reconhecidos."</p><p style="font-style:italic;font-size:.82em;color:var(--muted);margin-bottom:16px">(Baseado em literatura de segurança da informação.)</p><p style="margin-bottom:10px">Avalie as afirmações a seguir.</p><p style="margin:10px 0"><strong>I.</strong> No RBAC (controle de acesso baseado em papéis), as permissões são atribuídas a papéis (funções) organizacionais, e os usuários recebem acesso aos recursos indiretamente, por meio da atribuição a um ou mais desses papéis.</p><p style="margin:10px 0"><strong>II.</strong> No DAC (controle de acesso discricionário), o proprietário de um recurso tem a liberdade de conceder ou revogar, a seu critério, permissões de acesso a outros usuários sobre esse recurso.</p><p style="margin:10px 0"><strong>III.</strong> No MAC (controle de acesso obrigatório), as políticas de acesso são definidas e impostas centralmente pelo sistema (ou por uma autoridade de segurança), e usuários individuais, mesmo sendo proprietários de um recurso, não têm liberdade para alterar essas políticas por conta própria — diferindo, nesse aspecto, do DAC.</p><p style="margin-top:14px">É correto o que se afirma em:</p>`,
+  alts:[
+    `I, II e III.`,
+    `I e II, apenas.`,
+    `I, apenas.`,
+    `II e III, apenas.`,
+    `I e III, apenas.`
+  ]
+},
+{
+  titulo:`QUESTÃO 42 — Banco de Dados / Terceira Forma Normal (3FN)`,
+  enunciado:`<p style="font-style:italic;color:var(--muted);margin-bottom:6px">"A Terceira Forma Normal (3FN) é um nível de normalização de bancos de dados relacionais que exige, além do atendimento à Segunda Forma Normal (2FN), a ausência de dependências transitivas entre atributos não-chave de uma tabela."</p><p style="font-style:italic;font-size:.82em;color:var(--muted);margin-bottom:16px">(Baseado em literatura de sistemas de banco de dados.)</p><p style="margin-bottom:10px">Avalie as afirmações a seguir.</p><p style="margin:10px 0"><strong>I.</strong> Uma dependência transitiva ocorre quando um atributo não-chave depende de outro atributo não-chave, que por sua vez depende da chave primária, em vez de depender diretamente da chave primária.</p><p style="margin:10px 0"><strong>II.</strong> Para que uma tabela esteja na 3FN, ela deve, necessariamente, já estar na 2FN, o que por sua vez pressupõe que ela já esteja na Primeira Forma Normal (1FN) — a normalização é um processo cumulativo e sequencial de formas normais.</p><p style="margin:10px 0"><strong>III.</strong> A normalização até a 3FN elimina toda e qualquer redundância de dados possível em um banco de dados relacional, não havendo nenhum nível adicional de normalização (como a Forma Normal de Boyce-Codd) capaz de tratar redundâncias remanescentes.</p><p style="margin-top:14px">É correto o que se afirma em:</p>`,
+  alts:[
+    `I, apenas.`,
+    `III, apenas.`,
+    `I e II, apenas.`,
+    `II e III, apenas.`,
+    `I, II e III.`
+  ]
+},
+{
+  titulo:`QUESTÃO 43 — Banco de Dados / NoSQL: Documentos vs. Grafos`,
+  enunciado:`<p style="font-style:italic;color:var(--muted);margin-bottom:6px">"Bancos de dados NoSQL compreendem diferentes categorias conforme seu modelo de dados, incluindo bancos orientados a documentos (como o MongoDB) e bancos orientados a grafos (como o Neo4j), cada um adequado a diferentes tipos de problema."</p><p style="font-style:italic;font-size:.82em;color:var(--muted);margin-bottom:16px">(Baseado em literatura de sistemas de banco de dados.)</p><p style="margin-bottom:10px">Avalie as afirmações a seguir.</p><p style="margin:10px 0"><strong>I.</strong> Bancos orientados a documentos armazenam dados em estruturas semelhantes a documentos (frequentemente em formato JSON ou similar), permitindo que registros da mesma coleção tenham estruturas de campos distintas entre si, sem um esquema rígido obrigatório.</p><p style="margin:10px 0"><strong>II.</strong> Bancos orientados a grafos são particularmente adequados para modelar e consultar dados com relacionamentos altamente interconectados, como redes sociais ou sistemas de recomendação, em que percorrer relacionamentos de forma eficiente é uma necessidade central.</p><p style="margin:10px 0"><strong>III.</strong> Bancos orientados a documentos e bancos orientados a grafos utilizam exatamente o mesmo modelo de dados subjacente, diferindo apenas na terminologia utilizada por cada fabricante de SGBD.</p><p style="margin-top:14px">É correto o que se afirma em:</p>`,
+  alts:[
+    `I, apenas.`,
+    `III, apenas.`,
+    `I e III, apenas.`,
+    `II e III, apenas.`,
+    `I e II, apenas.`
+  ]
+},
+{
+  titulo:`QUESTÃO 44 — Banco de Dados / Particionamento e Sharding`,
+  enunciado:`<p style="font-style:italic;color:var(--muted);margin-bottom:6px">"O particionamento (partitioning) e o sharding são técnicas utilizadas para distribuir os dados de um banco de dados entre múltiplos servidores ou partições lógicas, visando melhorar a escalabilidade horizontal e o desempenho em cenários de grande volume de dados."</p><p style="font-style:italic;font-size:.82em;color:var(--muted);margin-bottom:16px">(Baseado em literatura de sistemas de banco de dados.)</p><p style="margin-bottom:10px">Avalie as afirmações a seguir.</p><p style="margin:10px 0"><strong>I.</strong> O sharding distribui os dados de uma mesma tabela entre múltiplos servidores (shards) distintos, de modo que cada shard armazena apenas um subconjunto do total de registros, permitindo que a carga de processamento seja distribuída entre máquinas diferentes.</p><p style="margin:10px 0"><strong>II.</strong> A escolha de uma "chave de particionamento" (shard key) inadequada pode resultar em distribuição desigual de dados e de carga entre os shards (um fenômeno conhecido como "hot spot" ou partição quente), comprometendo os ganhos de desempenho esperados.</p><p style="margin:10px 0"><strong>III.</strong> O particionamento e o sharding são técnicas exclusivas de bancos de dados NoSQL, não podendo ser aplicadas, em nenhuma circunstância, a bancos de dados relacionais tradicionais.</p><p style="margin-top:14px">É correto o que se afirma em:</p>`,
+  alts:[
+    `I, apenas.`,
+    `I e II, apenas.`,
+    `III, apenas.`,
+    `II e III, apenas.`,
+    `I, II e III.`
+  ]
+},
+{
+  titulo:`QUESTÃO 45 — Visualização e Ciência de Dados / Princípios de Design de Dashboards`,
+  enunciado:`<p style="font-style:italic;color:var(--muted);margin-bottom:6px">"O projeto de dashboards eficazes envolve princípios como a seleção criteriosa de indicadores-chave de desempenho (KPIs), o controle da densidade de informação apresentada e o uso de atributos visuais pré-atentivos (como cor e tamanho) para direcionar a atenção do usuário rapidamente."</p><p style="font-style:italic;font-size:.82em;color:var(--muted);margin-bottom:16px">(Baseado em literatura de visualização de dados.)</p><p style="margin-bottom:10px">Avalie as afirmações a seguir.</p><p style="margin:10px 0"><strong>I.</strong> Atributos visuais pré-atentivos, como cor, forma e tamanho, podem ser processados pelo cérebro humano em frações de segundo, antes mesmo de um processamento consciente e deliberado, sendo úteis para destacar informações críticas em um dashboard.</p><p style="margin:10px 0"><strong>II.</strong> Um dashboard eficaz deve apresentar o maior número possível de indicadores e gráficos simultaneamente em uma única tela, visto que quanto mais informação disponível de uma só vez, melhor é a qualidade da tomada de decisão do usuário.</p><p style="margin:10px 0"><strong>III.</strong> A escolha cuidadosa de quais KPIs exibir em um dashboard deve estar alinhada aos objetivos de negócio e ao público-alvo do dashboard, evitando a inclusão de métricas irrelevantes ou pouco acionáveis para a tomada de decisão.</p><p style="margin-top:14px">É correto o que se afirma em:</p>`,
+  alts:[
+    `I, apenas.`,
+    `II, apenas.`,
+    `II e III, apenas.`,
+    `I e III, apenas.`,
+    `I, II e III.`
+  ]
+},
+{
+  titulo:`QUESTÃO 46 — Visualização e Ciência de Dados / Overfitting e Underfitting`,
+  enunciado:`<p style="font-style:italic;color:var(--muted);margin-bottom:6px">"No treinamento de modelos de aprendizado de máquina, o overfitting e o underfitting representam dois problemas opostos relacionados à capacidade do modelo de generalizar seu desempenho para dados não vistos durante o treinamento."</p><p style="font-style:italic;font-size:.82em;color:var(--muted);margin-bottom:16px">(Baseado em literatura de aprendizado de máquina.)</p><p style="margin-bottom:10px">Avalie as afirmações a seguir.</p><p style="margin:10px 0"><strong>I.</strong> O overfitting ocorre quando um modelo aprende excessivamente os detalhes e o ruído específicos dos dados de treinamento, resultando em alto desempenho sobre esses dados, mas baixo desempenho de generalização sobre dados novos, não vistos anteriormente.</p><p style="margin:10px 0"><strong>II.</strong> O underfitting ocorre quando um modelo é excessivamente simples para capturar os padrões subjacentes relevantes dos dados, resultando em baixo desempenho tanto nos dados de treinamento quanto nos dados de teste/validação.</p><p style="margin:10px 0"><strong>III.</strong> Técnicas de regularização (como a adição de penalidades à complexidade do modelo) são utilizadas especificamente para combater o underfitting, nunca sendo aplicadas como estratégia para mitigar o overfitting.</p><p style="margin-top:14px">É correto o que se afirma em:</p>`,
+  alts:[
+    `I, apenas.`,
+    `III, apenas.`,
+    `I e III, apenas.`,
+    `I e II, apenas.`,
+    `I, II e III.`
+  ]
+},
+{
+  titulo:`QUESTÃO 47 — Visualização e Ciência de Dados / Vieses Cognitivos na Visualização`,
+  enunciado:`<p style="font-style:italic;color:var(--muted);margin-bottom:6px">"A interpretação de visualizações de dados está sujeita a vieses cognitivos do observador, como o viés de confirmação, que pode levar um usuário a interpretar um gráfico de forma a confirmar crenças pré-existentes, mesmo quando os dados apresentados sugerem uma conclusão diferente."</p><p style="font-style:italic;font-size:.82em;color:var(--muted);margin-bottom:16px">(Baseado em literatura de visualização de dados.)</p><p style="margin-bottom:10px">Avalie as afirmações a seguir.</p><p style="margin:10px 0"><strong>I.</strong> O viés de confirmação pode levar um analista a dar mais atenção a pontos de um gráfico que confirmam sua hipótese inicial, ao mesmo tempo em que minimiza ou ignora pontos que a contradizem.</p><p style="margin:10px 0"><strong>II.</strong> Vieses cognitivos na interpretação de visualizações afetam exclusivamente usuários leigos, sem qualquer formação técnica, não tendo nenhum efeito sobre analistas de dados ou cientistas de dados experientes.</p><p style="margin:10px 0"><strong>III.</strong> Uma forma de mitigar o viés de confirmação na análise de dados é buscar ativamente evidências que possam contradizer a hipótese inicial, em vez de buscar apenas evidências que a confirmem.</p><p style="margin-top:14px">É correto o que se afirma em:</p>`,
+  alts:[
+    `I, apenas.`,
+    `I e III, apenas.`,
+    `II, apenas.`,
+    `II e III, apenas.`,
+    `I, II e III.`
+  ]
+},
+{
+  titulo:`QUESTÃO 48 — Informática e Sociedade / Economia de Plataformas`,
+  enunciado:`<p style="font-style:italic;color:var(--muted);margin-bottom:6px">"A economia de plataformas, viabilizada por aplicativos que conectam prestadores de serviço a consumidores (como aplicativos de transporte e de entrega), transformou relações de trabalho tradicionais, gerando debates sobre a classificação jurídica e as condições de trabalho dos prestadores de serviço conectados a essas plataformas."</p><p style="font-style:italic;font-size:.82em;color:var(--muted);margin-bottom:16px">(Baseado em literatura de informática e sociedade.)</p><p style="margin-bottom:10px">Avalie as afirmações a seguir.</p><p style="margin:10px 0"><strong>I.</strong> Trabalhadores de plataformas digitais (como motoristas e entregadores de aplicativo) são, em muitos países, classificados juridicamente como prestadores de serviço autônomos, e não como empregados formais, o que gera debates sobre o acesso desses trabalhadores a direitos trabalhistas tradicionais.</p><p style="margin:10px 0"><strong>II.</strong> Algoritmos de gerenciamento algorítmico (algorithmic management) utilizados por plataformas digitais podem influenciar diretamente a remuneração, a distribuição de tarefas e até mesmo o desligamento de trabalhadores, sem necessariamente haver supervisão humana direta em cada decisão.</p><p style="margin:10px 0"><strong>III.</strong> A economia de plataformas não gera nenhum tipo de debate ou controvérsia relacionado a direitos trabalhistas, sendo um modelo de trabalho universalmente consensual entre trabalhadores, plataformas e legisladores em todos os países.</p><p style="margin-top:14px">É correto o que se afirma em:</p>`,
+  alts:[
+    `I, apenas.`,
+    `III, apenas.`,
+    `I e II, apenas.`,
+    `II e III, apenas.`,
+    `I, II e III.`
+  ]
+},
+{
+  titulo:`QUESTÃO 49 — Informática e Sociedade / Pegada de Carbono de Data Centers e IA`,
+  enunciado:`<p style="font-style:italic;color:var(--muted);margin-bottom:6px">"O crescimento do uso de inteligência artificial, especialmente de modelos de grande porte, tem ampliado a discussão sobre a pegada de carbono e o consumo energético e hídrico de data centers, levantando questões de sustentabilidade digital para a sociedade e para a indústria de tecnologia."</p><p style="font-style:italic;font-size:.82em;color:var(--muted);margin-bottom:16px">(Baseado em literatura de informática e sociedade.)</p><p style="margin-bottom:10px">Avalie as afirmações a seguir.</p><p style="margin:10px 0"><strong>I.</strong> O treinamento de modelos de inteligência artificial de grande porte pode demandar quantidades significativas de energia elétrica, o que tem motivado discussões sobre a sustentabilidade ambiental do crescimento acelerado da IA.</p><p style="margin:10px 0"><strong>II.</strong> Data centers utilizados para treinar e operar modelos de IA frequentemente também demandam grandes volumes de água para sistemas de resfriamento, o que tem gerado debates sobre o impacto desses data centers em regiões com estresse hídrico.</p><p style="margin:10px 0"><strong>III.</strong> O consumo energético de data centers de IA é desprezível e irrelevante quando comparado a outros setores da economia, não justificando nenhum tipo de preocupação ou debate sobre sustentabilidade digital.</p><p style="margin-top:14px">É correto o que se afirma em:</p>`,
+  alts:[
+    `I e II, apenas.`,
+    `I, apenas.`,
+    `III, apenas.`,
+    `II e III, apenas.`,
+    `I, II e III.`
+  ]
+},
+{
+  titulo:`QUESTÃO 50 — Informática e Sociedade / Soberania Digital de Dados`,
+  enunciado:`<p style="font-style:italic;color:var(--muted);margin-bottom:6px">"A soberania digital de dados refere-se ao princípio segundo o qual os dados de uma nação ou organização devem estar sujeitos às leis e à governança do país onde foram coletados ou armazenados, tornando-se um tema relevante diante da dependência de muitos países em relação a provedores estrangeiros de serviços de nuvem."</p><p style="font-style:italic;font-size:.82em;color:var(--muted);margin-bottom:16px">(Baseado em literatura de informática e sociedade.)</p><p style="margin-bottom:10px">Avalie as afirmações a seguir.</p><p style="margin:10px 0"><strong>I.</strong> A localização física dos servidores que armazenam um conjunto de dados (data residency) pode determinar qual legislação se aplica a esses dados, sendo um fator relevante em debates sobre soberania digital.</p><p style="margin:10px 0"><strong>II.</strong> A dependência de uma organização ou de um país em relação a um número reduzido de provedores estrangeiros de nuvem pode gerar preocupações relacionadas à segurança nacional, à continuidade de serviços e ao controle sobre dados sensíveis.</p><p style="margin:10px 0"><strong>III.</strong> A soberania digital de dados é uma preocupação restrita a países em desenvolvimento, não sendo um tema relevante para países desenvolvidos ou para blocos econômicos como a União Europeia.</p><p style="margin-top:14px">É correto o que se afirma em:</p>`,
+  alts:[
+    `I, apenas.`,
+    `III, apenas.`,
+    `I e III, apenas.`,
+    `II e III, apenas.`,
+    `I e II, apenas.`
+  ]
+}
+];
+
+const GABARITO = [2, 0, 4, 1, 3, 1, 3, 0, 2, 4, 2, 1, 4, 3, 4, 0, 4, 3, 2, 1, 3, 0, 2, 0, 2, 1, 4, 0, 3, 1, 1, 0, 3, 4, 2, 4, 3, 1, 2, 0, 0, 2, 4, 1, 3, 3, 1, 2, 0, 4];
+
+/* ===== Configuração do simulado ===== */
+const TOTAL_QS = 50;
+const VALOR_Q = 0.4;
+const DURACAO_MIN = 180;
+const SENHA_PROF = "enade2026ifto";
+const SALT_COMPROVANTE = "IFTO-ENADE-2026-TSI2";
+const ALUNOS = {
+  "2023118900029": "Cauã da Silva Nunes",
+  "2023118900019": "David Arruda de Souza",
+  "2023118900119": "Diego Almeida Gomes Araújo",
+  "2023118900089": "Hayron Rodrigues Neves",
+  "202210218901409": "Joana Luiza Brito Oliveira",
+  "2023118900169": "João Pedro Almeida Lacerda",
+  "202110218901779": "João Pedro Silva de Souza",
+  "2023118900129": "Júlia Almeida Melo",
+  "2023118900179": "Laura Vitória Rodrigues de Sá",
+  "2024118900209": "Maria Eduarda Decarli de Assis",
+  "2023118900149": "Pedro Bertoldo dos Santos Rocha",
+  "2023118900269": "Samuel Maciel Costa Messias Araújo",
+  "2023118900039": "Vinícius da Silva Alves",
+  "2023118900219": "Vinicius Ribeiro de Araujo"
+};
+
+/* ===== Estado em memória ===== */
+let aluno = { matricula: "", nome: "" };
+let respostas = new Array(TOTAL_QS).fill(null);
+let segundosRestantes = DURACAO_MIN * 60;
+let timerId = null;
+let provaFinalizada = false;
+
+/* ===== Controle de uma única tentativa por navegador ===== */
+const LOCK_PREFIX = 'enade26_feito_';
+function jaConcluiu(matricula) {
+  try { return localStorage.getItem(LOCK_PREFIX + matricula); } catch (e) { return null; }
+}
+function marcarConcluido(matricula, rec) {
+  try { localStorage.setItem(LOCK_PREFIX + matricula, JSON.stringify({ ts: rec.ts, nota: rec.nota })); } catch (e) {}
+}
+
+/* ===== Navegação entre telas ===== */
+function go(id) {
+  document.querySelectorAll('.screen').forEach(s => s.hidden = (s.id !== id));
+  window.scrollTo({ top: 0, behavior: 'instant' in window ? 'instant' : 'auto' });
+}
+
+/* ===== Login do aluno ===== */
+function showLoginError(msg) {
+  const box = document.getElementById('login-error');
+  box.textContent = msg;
+  box.hidden = false;
+}
+document.getElementById('in-matricula').addEventListener('input', () => {
+  const m = document.getElementById('in-matricula').value.trim();
+  const field = document.getElementById('nome-confirm-field');
+  const chip = document.getElementById('nome-confirm-chip');
+  const btn = document.getElementById('btn-start');
+  document.getElementById('login-error').hidden = true;
+  if (!ALUNOS[m]) {
+    field.hidden = true;
+    btn.disabled = true;
+    return;
+  }
+  const feito = jaConcluiu(m);
+  if (feito) {
+    field.hidden = true;
+    btn.disabled = true;
+    let info = null;
+    try { info = JSON.parse(feito); } catch (e) {}
+    const quando = info && info.ts ? new Date(info.ts).toLocaleString('pt-BR') : '';
+    showLoginError(`${ALUNOS[m]} já concluiu este simulado neste navegador${quando ? ' em ' + quando : ''}. Cada matrícula só pode realizar a prova uma vez. Em caso de dúvida, fale com o professor.`);
+    return;
+  }
+  chip.textContent = ALUNOS[m];
+  field.hidden = false;
+  btn.disabled = false;
+});
+document.getElementById('btn-start').addEventListener('click', () => {
+  const box = document.getElementById('login-error');
+  box.hidden = true;
+  const matricula = document.getElementById('in-matricula').value.trim();
+  if (!matricula || !ALUNOS[matricula]) {
+    showLoginError('Matrícula não localizada na lista de inscritos neste simulado. Verifique o número informado.');
+    return;
+  }
+  if (jaConcluiu(matricula)) {
+    showLoginError('Este simulado já foi concluído com esta matrícula neste navegador. Não é possível refazer.');
+    return;
+  }
+  aluno = { matricula, nome: ALUNOS[matricula] };
+  iniciarQuiz();
+});
+
+/* ===== Quiz ===== */
+function renderQuestoes() {
+  const wrap = document.getElementById('quiz-questions');
+  wrap.innerHTML = QUESTOES.map((q, qi) => `
+    <div class="q-card" id="qcard-${qi}">
+      <div class="q-title">${q.titulo}</div>
+      <div class="q-body">${q.enunciado}</div>
+      <div class="opts" role="radiogroup" aria-label="Alternativas da questão ${qi + 1}">
+        ${q.alts.map((alt, ai) => `
+          <button type="button" class="opt" role="radio" aria-checked="false" aria-pressed="false" data-qi="${qi}" data-ai="${ai}">
+            <span class="letter">${'ABCDE'[ai]}</span><span>${alt}</span>
+          </button>
+        `).join('')}
+      </div>
+    </div>
+  `).join('');
+  wrap.querySelectorAll('.opt').forEach(btn => {
+    btn.addEventListener('click', () => selOpt(Number(btn.dataset.qi), Number(btn.dataset.ai)));
+  });
+}
+
+function selOpt(qi, ai) {
+  respostas[qi] = ai;
+  const card = document.getElementById('qcard-' + qi);
+  card.classList.remove('unanswered-flag');
+  card.querySelectorAll('.opt').forEach(b => {
+    const isSel = Number(b.dataset.ai) === ai;
+    b.setAttribute('aria-pressed', isSel ? 'true' : 'false');
+    b.setAttribute('aria-checked', isSel ? 'true' : 'false');
+  });
+  atualizarProg();
+}
+
+function atualizarProg() {
+  const respondidas = respostas.filter(r => r !== null).length;
+  document.getElementById('quiz-progress-fill').style.width = (respondidas / TOTAL_QS * 100) + '%';
+  document.getElementById('quiz-progress-label').textContent = `${respondidas} de ${TOTAL_QS} respondidas`;
+}
+
+function fmtTempo(s) {
+  const m = Math.floor(s / 60), sec = s % 60;
+  return String(m).padStart(2, '0') + ':' + String(sec).padStart(2, '0');
+}
+
+function tickTimer() {
+  segundosRestantes--;
+  const el = document.getElementById('quiz-timer');
+  el.textContent = fmtTempo(Math.max(0, segundosRestantes));
+  el.classList.toggle('low', segundosRestantes <= 300);
+  if (segundosRestantes <= 0) {
+    clearInterval(timerId);
+    finalizarProva(true);
+  }
+}
+
+function iniciarQuiz() {
+  respostas = new Array(TOTAL_QS).fill(null);
+  segundosRestantes = DURACAO_MIN * 60;
+  provaFinalizada = false;
+  document.getElementById('quiz-id-label').textContent = `${aluno.nome} · Mat. ${aluno.matricula}`;
+  document.getElementById('quiz-timer').textContent = fmtTempo(segundosRestantes);
+  document.getElementById('quiz-timer').classList.remove('low');
+  renderQuestoes();
+  atualizarProg();
+  document.getElementById('confirm-panel').hidden = true;
+  go('s-quiz');
+  timerId = setInterval(tickTimer, 1000);
+}
+
+document.getElementById('btn-finalizar').addEventListener('click', () => {
+  const brancos = respostas.filter(r => r === null).length;
+  const panel = document.getElementById('confirm-panel');
+  document.getElementById('confirm-text').textContent = brancos > 0
+    ? `Você deixou ${brancos} questão(ões) em branco. Finalizar mesmo assim?`
+    : `Todas as questões foram respondidas. Finalizar o simulado?`;
+  panel.hidden = false;
+  panel.scrollIntoView({ block: 'nearest' });
+});
+document.getElementById('btn-cancel-finalizar').addEventListener('click', () => {
+  document.getElementById('confirm-panel').hidden = true;
+});
+document.getElementById('btn-confirm-finalizar').addEventListener('click', () => finalizarProva(false));
+
+/* ===== Checksum / comprovante (não é criptografia — apenas um selo que detecta edição manual) ===== */
+function checksum(str) {
+  let h = 0;
+  for (let i = 0; i < str.length; i++) { h = (h * 31 + str.charCodeAt(i)) >>> 0; }
+  return h.toString(36);
+}
+function b64enc(str) { return btoa(unescape(encodeURIComponent(str))); }
+function b64dec(str) { return decodeURIComponent(escape(atob(str))); }
+function gerarComprovante(rec) {
+  const payload = JSON.stringify(rec);
+  const sum = checksum(payload + SALT_COMPROVANTE);
+  return 'ENADE26-' + b64enc(payload) + '.' + sum;
+}
+function lerComprovante(codeRaw) {
+  let code = codeRaw.trim();
+  if (code.startsWith('ENADE26-')) code = code.slice(8);
+  const idx = code.lastIndexOf('.');
+  if (idx < 0) throw new Error('Formato de código inválido.');
+  const payload = b64dec(code.slice(0, idx));
+  const sum = code.slice(idx + 1);
+  if (checksum(payload + SALT_COMPROVANTE) !== sum) throw new Error('Código inválido ou adulterado.');
+  return JSON.parse(payload);
+}
+
+/* Registro travado no servidor (Netlify Function + Blobs): a primeira submissão de
+   cada matrícula é definitiva — uma segunda tentativa (409) nunca sobrescreve a primeira. */
+function registrarNoServidor(rec) {
+  return fetch('/.netlify/functions/registrar', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(rec)
+  }).then(async resp => {
+    let data = {};
+    try { data = await resp.json(); } catch (e) {}
+    if (resp.status === 201) return { status: 'ok', registro: data.registro };
+    if (resp.status === 409) return { status: 'duplicado', registro: data.registro };
+    return { status: 'erro' };
+  }).catch(() => ({ status: 'erro' }));
+}
+
+function enviarNetlifyForm(rec) {
+  const body = new URLSearchParams({
+    'form-name': 'resultados-enade26',
+    matricula: rec.matricula,
+    nome: rec.nome,
+    acertos: String(rec.acertos),
+    erros: String(rec.erros),
+    branco: String(rec.branco),
+    nota: String(rec.nota),
+    aproveitamento: String(rec.aproveitamento),
+    data: rec.ts
+  }).toString();
+  return fetch('/', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body
+  }).then(r => r.ok).catch(() => false);
+}
+
+function finalizarProva(porTempo) {
+  if (provaFinalizada) return;
+  provaFinalizada = true;
+  clearInterval(timerId);
+
+  document.getElementById('dup-banner').hidden = true;
+  document.getElementById('respostas-card').hidden = false;
+
+  let acertos = 0, erros = 0, branco = 0;
+  const linhas = [];
+  for (let i = 0; i < TOTAL_QS; i++) {
+    const r = respostas[i];
+    let status;
+    if (r === null) { branco++; status = 'blank'; }
+    else if (r === GABARITO[i]) { acertos++; status = 'ok'; }
+    else { erros++; status = 'no'; }
+    linhas.push({ num: i + 1, resp: r === null ? '—' : 'ABCDE'[r], status });
+  }
+  const nota = Math.round(acertos * VALOR_Q * 10) / 10;
+  const aproveitamento = Math.round(acertos / TOTAL_QS * 100);
+
+  document.getElementById('res-nome').textContent = aluno.nome;
+  document.getElementById('res-nota').innerHTML = nota.toFixed(1).replace('.', ',') + ' <small>/ 20,0</small>';
+  document.getElementById('res-acertos').textContent = acertos;
+  document.getElementById('res-erros').textContent = erros;
+  document.getElementById('res-branco').textContent = branco;
+  document.getElementById('res-aproveitamento').textContent = aproveitamento + '%';
+
+  const bar = document.getElementById('perf-bar');
+  bar.innerHTML = `
+    <div class="perf-seg" style="width:${acertos / TOTAL_QS * 100}%; background:var(--green)"></div>
+    <div class="perf-seg" style="width:${erros / TOTAL_QS * 100}%; background:var(--red)"></div>
+    <div class="perf-seg" style="width:${branco / TOTAL_QS * 100}%; background:var(--border)"></div>
+  `;
+
+  document.getElementById('resp-tbody').innerHTML = linhas.map(l => `
+    <tr>
+      <td>${l.num}</td>
+      <td>${l.resp}</td>
+      <td>${l.status === 'ok' ? '<span class="tag tag-ok">Correta</span>' : l.status === 'no' ? '<span class="tag tag-no">Incorreta</span>' : '<span class="tag tag-blank">Em branco</span>'}</td>
+    </tr>
+  `).join('');
+
+  const rec = {
+    matricula: aluno.matricula, nome: aluno.nome,
+    acertos, erros, branco, nota, aproveitamento,
+    ts: new Date().toISOString(), porTempo: !!porTempo
+  };
+  document.getElementById('comprovante-text').value = gerarComprovante(rec);
+  marcarConcluido(aluno.matricula, rec);
+  enviarNetlifyForm(rec); /* log de auditoria no Netlify Forms, não bloqueante */
+
+  const badge = document.getElementById('sync-badge');
+  const dupBanner = document.getElementById('dup-banner');
+  badge.textContent = 'confirmando com o servidor…';
+  badge.className = 'sync-badge sync-off';
+
+  registrarNoServidor(rec).then(resultado => {
+    if (resultado.status === 'ok') {
+      badge.textContent = '✓ nota registrada e travada no servidor';
+      badge.className = 'sync-badge sync-ok';
+      return;
+    }
+    if (resultado.status === 'duplicado' && resultado.registro) {
+      const oficial = resultado.registro;
+      const quando = oficial.ts ? new Date(oficial.ts).toLocaleString('pt-BR') : '—';
+      dupBanner.textContent = `Já existe um resultado registrado para esta matrícula em ${quando}. Essa é a nota oficial e não pode ser substituída — os números abaixo foram ajustados para refletir o registro original.`;
+      dupBanner.hidden = false;
+      document.getElementById('res-nota').innerHTML = Number(oficial.nota).toFixed(1).replace('.', ',') + ' <small>/ 20,0</small>';
+      document.getElementById('res-acertos').textContent = oficial.acertos;
+      document.getElementById('res-erros').textContent = oficial.erros;
+      document.getElementById('res-branco').textContent = oficial.branco;
+      document.getElementById('res-aproveitamento').textContent = oficial.aproveitamento + '%';
+      document.getElementById('respostas-card').hidden = true;
+      document.getElementById('comprovante-text').value = gerarComprovante(oficial);
+      badge.textContent = 'tentativa adicional não registrada — nota oficial mantida';
+      badge.className = 'sync-badge sync-off';
+      return;
+    }
+    badge.textContent = 'não foi possível confirmar com o servidor — envie o código de comprovante por garantia';
+    badge.className = 'sync-badge sync-off';
+  });
+
+  go('s-result');
+}
+
+document.getElementById('btn-copy-comprovante').addEventListener('click', async () => {
+  const txt = document.getElementById('comprovante-text').value;
+  try {
+    await navigator.clipboard.writeText(txt);
+  } catch (e) {
+    const ta = document.getElementById('comprovante-text');
+    ta.focus(); ta.select();
+  }
+  const fb = document.getElementById('copy-feedback');
+  fb.hidden = false;
+  setTimeout(() => fb.hidden = true, 2000);
+});
+
+document.getElementById('btn-back-login').addEventListener('click', () => {
+  document.getElementById('in-matricula').value = '';
+  document.getElementById('nome-confirm-field').hidden = true;
+  document.getElementById('btn-start').disabled = true;
+  go('s-login');
+});
+
+/* ===== Painel do professor ===== */
+let registros = {}; // matricula -> record
+
+document.getElementById('btn-go-proflogin').addEventListener('click', () => go('s-prof-login'));
+document.getElementById('btn-prof-voltar').addEventListener('click', () => go('s-login'));
+document.getElementById('btn-prof-entrar').addEventListener('click', () => {
+  const pw = document.getElementById('in-prof-pw').value;
+  const err = document.getElementById('prof-error');
+  if (pw === SENHA_PROF) {
+    err.hidden = true;
+    document.getElementById('in-prof-pw').value = '';
+    abrirPainel();
+  } else {
+    err.textContent = 'Senha incorreta.';
+    err.hidden = false;
+  }
+});
+document.getElementById('btn-prof-sair').addEventListener('click', () => go('s-login'));
+
+function abrirPainel() {
+  go('s-prof');
+  renderPainel();
+  atualizarDoServidor();
+}
+
+async function atualizarDoServidor() {
+  const box = document.getElementById('servidor-error');
+  box.hidden = true;
+  try {
+    const resp = await fetch('/.netlify/functions/registrar?senha=' + encodeURIComponent(SENHA_PROF));
+    if (!resp.ok) throw new Error('resposta ' + resp.status);
+    const data = await resp.json();
+    Object.entries(data.registros || {}).forEach(([m, r]) => {
+      registros[m] = r;
+    });
+    renderPainel();
+  } catch (e) {
+    box.textContent = 'Não foi possível consultar o servidor agora. Se o site ainda não tem a função "registrar" publicada, use a importação manual de comprovantes.';
+    box.hidden = false;
+  }
+}
+document.getElementById('btn-atualizar-servidor').addEventListener('click', atualizarDoServidor);
+
+function renderPainel() {
+  const tbody = document.getElementById('prof-tbody');
+  const matriculas = Object.keys(ALUNOS);
+  const concluidos = matriculas.filter(m => registros[m]).length;
+  document.getElementById('prof-total').textContent = matriculas.length;
+  document.getElementById('prof-concluidos').textContent = concluidos;
+  document.getElementById('prof-pendentes').textContent = matriculas.length - concluidos;
+  const notas = matriculas.map(m => registros[m] && registros[m].nota).filter(n => n !== undefined && n !== null);
+  document.getElementById('prof-media').textContent = notas.length
+    ? (notas.reduce((a, b) => a + b, 0) / notas.length).toFixed(1).replace('.', ',')
+    : '—';
+
+  tbody.innerHTML = matriculas.map(m => {
+    const r = registros[m];
+    const nomeAluno = ALUNOS[m];
+    if (!r) {
+      return `<tr><td>${m}</td><td>${nomeAluno}</td><td><span class="status-pill status-pending">Pendente</span></td><td>—</td><td>—</td><td>—</td><td></td></tr>`;
+    }
+    const quando = r.ts ? new Date(r.ts).toLocaleString('pt-BR') : '—';
+    return `<tr>
+      <td>${m}</td>
+      <td>${nomeAluno}</td>
+      <td><span class="status-pill status-done">Concluído</span></td>
+      <td>${(r.nota ?? 0).toFixed(1).replace('.', ',')}</td>
+      <td>${r.acertos ?? '—'}</td>
+      <td>${quando}</td>
+      <td><button class="remove-btn" data-m="${m}">remover</button></td>
+    </tr>`;
+  }).join('');
+
+  tbody.querySelectorAll('.remove-btn').forEach(b => {
+    b.addEventListener('click', () => {
+      const m = b.dataset.m;
+      delete registros[m];
+      renderPainel();
+    });
+  });
+
+  gerarCSV();
+}
+
+document.getElementById('btn-toggle-gabarito').addEventListener('click', () => {
+  const grid = document.getElementById('gab-grid');
+  const btn = document.getElementById('btn-toggle-gabarito');
+  if (grid.hidden) {
+    grid.innerHTML = GABARITO.map((g, i) => `<div class="gab-item"><div class="n">Q${String(i + 1).padStart(2, '0')}</div><div class="l">${'ABCDE'[g]}</div></div>`).join('');
+    grid.hidden = false;
+    btn.textContent = 'Ocultar gabarito';
+  } else {
+    grid.hidden = true;
+    btn.textContent = 'Mostrar gabarito';
+  }
+});
+
+document.getElementById('btn-importar').addEventListener('click', () => {
+  const box = document.getElementById('import-error');
+  box.hidden = true;
+  const raw = document.getElementById('import-text').value;
+  if (!raw.trim()) { box.textContent = 'Cole um código de comprovante.'; box.hidden = false; return; }
+  try {
+    const rec = lerComprovante(raw);
+    if (!ALUNOS.hasOwnProperty(rec.matricula)) {
+      box.textContent = 'Matrícula do comprovante não está na lista de inscritos deste simulado.';
+      box.hidden = false;
+      return;
+    }
+    const existente = registros[rec.matricula];
+    if (existente) {
+      const quando = existente.ts ? new Date(existente.ts).toLocaleString('pt-BR') : '—';
+      box.textContent = `Já existe um resultado registrado para ${ALUNOS[rec.matricula]} (em ${quando}). Este código não substituirá o registro existente. Para trocar, remova o registro atual na tabela abaixo primeiro.`;
+      box.hidden = false;
+      return;
+    }
+    registros[rec.matricula] = { ...rec, nome: ALUNOS[rec.matricula] };
+    document.getElementById('import-text').value = '';
+    renderPainel();
+  } catch (e) {
+    box.textContent = e.message || 'Não foi possível ler este código.';
+    box.hidden = false;
+  }
+});
+
+function gerarCSV() {
+  const header = 'Matricula;Nome;Status;Nota;Acertos;Erros;Branco;Data';
+  const rows = Object.keys(ALUNOS).map(m => {
+    const r = registros[m];
+    const nome = ALUNOS[m];
+    if (!r) return [m, nome, 'Pendente', '', '', '', '', ''].join(';');
+    return [m, nome, 'Concluido', (r.nota ?? '').toString().replace('.', ','), r.acertos ?? '', r.erros ?? '', r.branco ?? '', r.ts ? new Date(r.ts).toLocaleString('pt-BR') : ''].join(';');
+  });
+  document.getElementById('export-text').value = [header, ...rows].join('\n');
+}
+
+document.getElementById('btn-copy-export').addEventListener('click', async () => {
+  const txt = document.getElementById('export-text').value;
+  try {
+    await navigator.clipboard.writeText(txt);
+  } catch (e) {
+    const ta = document.getElementById('export-text');
+    ta.focus(); ta.select();
+  }
+  const fb = document.getElementById('copy-feedback-export');
+  fb.hidden = false;
+  setTimeout(() => fb.hidden = true, 2000);
+});
+
+/* ===== Boot ===== */
+go('s-login');
+</script>
+
+</body>
+</html>
