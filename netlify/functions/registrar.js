@@ -137,7 +137,7 @@ var require_main3 = __commonJS({
     var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: true }), mod);
     var main_exports = {};
     __export(main_exports, {
-      connectLambda: () => connectLambda,
+      connectLambda: () => connectLambda2,
       getDeployStore: () => getDeployStore,
       getStore: () => getStore2,
       listStores: () => listStores,
@@ -172,7 +172,7 @@ var require_main3 = __commonJS({
       }
     };
     var import_runtime_utils2 = require_main();
-    var connectLambda = (event) => {
+    var connectLambda2 = (event) => {
       const rawData = (0, import_runtime_utils2.base64Decode)(event.blobs);
       const data = JSON.parse(rawData);
       const environmentContext = {
@@ -1065,7 +1065,7 @@ var require_main3 = __commonJS({
 });
 
 // src/registrar.js
-var { getStore } = require_main3();
+var { getStore, connectLambda } = require_main3();
 var ALUNOS = {
   "2023118900029": "Cau\xE3 da Silva Nunes",
   "2023118900019": "David Arruda de Souza",
@@ -1097,6 +1097,7 @@ function json(statusCode, body) {
   };
 }
 exports.handler = async (event) => {
+  connectLambda(event);
   if (event.httpMethod === "OPTIONS") {
     return json(200, { ok: true });
   }
@@ -1116,6 +1117,18 @@ exports.handler = async (event) => {
       }
     }
     return json(200, { registros });
+  }
+  if (event.httpMethod === "DELETE") {
+    const senha = event.queryStringParameters && event.queryStringParameters.senha || "";
+    if (senha !== SENHA_PROF) {
+      return json(401, { error: "Senha inv\xE1lida." });
+    }
+    const matricula2 = event.queryStringParameters && event.queryStringParameters.matricula || "";
+    if (!matricula2) {
+      return json(400, { error: "Informe a matr\xEDcula a remover." });
+    }
+    await store.delete(matricula2);
+    return json(200, { ok: true });
   }
   if (event.httpMethod !== "POST") {
     return json(405, { error: "M\xE9todo n\xE3o permitido." });
